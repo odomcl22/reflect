@@ -24,6 +24,7 @@ import { todayPage } from './reflect/Today.js';
 import { open as openPromises, settle as settlePromise } from './reflect/Promises.js';
 import { summary as ledgerSummary, entries as ledgerEntries } from './reflect/Ledger.js';
 import * as Deliver from './deliver/Deliver.js';
+import * as Kokoro from './speech/Kokoro.js';
 import { shouldSleep, sleep as sleepPass } from './reflect/Sleep.js';
 import { sources as receiptSources } from './reflect/Receipts.js';
 import { versions as listVersions, readVersion, restore as restoreVersion, snapshot as takeVersion } from './reflect/Versions.js';
@@ -506,6 +507,30 @@ export async function createApp() {
   // one delivery here that reaches nobody but them.
   app.post('/api/delivery/test', wrap(async (_req, res) => {
     res.json(await Deliver.notify({ body: 'This is how Reflect will reach you.' }));
+  }));
+
+  // ---- the voice ----------------------------------------------------------
+  // Off unless installed and chosen. The browser's own speech stays the
+  // default because it is instant, and this one is not: a neural voice that
+  // takes four seconds to start is a worse assistant than a plain one that
+  // answers immediately, however much better it sounds.
+  app.get('/api/voice', wrap(async (_req, res) => {
+    res.json({
+      installed: await Kokoro.installed(),
+      model: Kokoro.hasModel(),
+      voices: Kokoro.VOICES,
+    });
+  }));
+
+  app.post('/api/voice/speak', wrap(async (req, res) => {
+    const done = await Kokoro.speak({
+      text: String(req.body?.text || ''),
+      voice: String(req.body?.voice || 'af_heart'),
+      speed: Number(req.body?.speed) || 1,
+      blend: req.body?.blend?.with ? { with: String(req.body.blend.with), amount: Number(req.body.blend.amount) || 0 } : null,
+    });
+    if (!done.ok) return res.status(400).json({ error: done.reason });
+    res.set('Content-Type', 'audio/wav').set('Cache-Control', 'no-store').send(done.wav);
   }));
 
   // ---- the ledger ---------------------------------------------------------

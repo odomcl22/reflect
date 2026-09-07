@@ -1573,10 +1573,11 @@ async function showSettings() {
   if (!$('setbox').open) $('setbox').showModal();
   body.innerHTML = '<p class="quiet">Loading…</p>';
 
-  const [cfg, { models }, delivery] = await Promise.all([
+  const [cfg, { models }, delivery, kokoro] = await Promise.all([
     (await fetch('/api/settings')).json(),
     (await fetch('/api/models')).json(),
     fetch('/api/delivery').then((r) => r.json()).catch(() => ({ available: false, contacts: [] })),
+    fetch('/api/voice').then((r) => r.json()).catch(() => ({ installed: false, model: false, voices: [] })),
   ]);
 
   const check = (key, label, note, on) => `<div class="row">
@@ -1688,6 +1689,20 @@ async function showSettings() {
 
     <div class="glabel">Speech</div>
     <div class="row">
+      <h4>Which voice engine</h4>
+      <div class="sub">
+        <select data-set="speech.engine">
+          <option value="system"${(cfg.speech?.engine || 'system') === 'system' ? ' selected' : ''}>Your computer's voices — instant</option>
+          <option value="kokoro"${cfg.speech?.engine === 'kokoro' ? ' selected' : ''}${kokoro.model && kokoro.installed ? '' : ' disabled'}>Kokoro — much better, a few seconds' wait</option>
+        </select>
+        <div>${
+          kokoro.model && kokoro.installed
+            ? 'Kokoro is a neural voice that runs on this machine. It sounds far better and takes a few seconds to start, which is why it is not the default.'
+            : 'Kokoro is an optional neural voice — about 380MB once, then entirely local. Install it with <code>npm run install:voice</code> and reopen this panel.'
+        }</div>
+      </div>
+    </div>
+    <div class="row">
       <h4>Voice</h4>
       <div class="sub">
         <select data-set="speech.voice" id="voicepick"></select>
@@ -1696,6 +1711,32 @@ async function showSettings() {
         Adding more in your system settings adds them here.
       </div>
     </div>
+    ${kokoro.model && kokoro.installed ? `
+    <div class="row">
+      <h4>Kokoro voice</h4>
+      <div class="sub">
+        <select data-set="speech.kokoroVoice">
+          ${kokoro.voices.map((v) => `<option value="${esc(v.id)}"${(cfg.speech?.kokoroVoice || 'af_heart') === v.id ? ' selected' : ''}>${esc(v.name)} — ${esc(v.note)}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="row">
+      <h4>Blend with another</h4>
+      <div class="sub">
+        A Kokoro voice is a list of 256 numbers, not a recording — so averaging two of
+        them makes a third that sounds like neither exactly. This is how you get a voice
+        that is yours without recording anybody.
+        <div style="margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <select data-set="speech.blendWith">
+            <option value=""${cfg.speech?.blendWith ? '' : ' selected'}>No blending</option>
+            ${kokoro.voices.map((v) => `<option value="${esc(v.id)}"${cfg.speech?.blendWith === v.id ? ' selected' : ''}>${esc(v.name)}</option>`).join('')}
+          </select>
+          <input type="range" min="0" max="1" step="0.1" data-set="speech.blendAmount"
+                 value="${Number(cfg.speech?.blendAmount ?? 0.5)}" style="flex:1 1 120px" />
+          <button type="button" id="kokorotry">Hear it</button>
+        </div>
+      </div>
+    </div>` : ''}
     <div class="row">
       <h4>Speed</h4>
       <div class="sub">
@@ -1807,6 +1848,34 @@ async function showSettings() {
     loadVoices();
     fill();
     if (!speech.voices.length) speechSynthesis.addEventListener('voiceschanged', fill, { once: true });
+    body.querySelector('#kokorotry')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      btn.textContent = 'a moment…';
+      try {
+        const r = await fetch('/api/voice/speak', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: 'This is how I will read your replies.',
+            voice: body.querySelector('[data-set="speech.kokoroVoice"]')?.value || 'af_heart',
+            speed: Number(state.speech?.rate) || 1,
+            blend: body.querySelector('[data-set="speech.blendWith"]')?.value
+              ? {
+                  with: body.querySelector('[data-set="speech.blendWith"]').value,
+                  amount: Number(body.querySelector('[data-set="speech.blendAmount"]').value),
+                }
+              : null,
+          }),
+        });
+        if (r.ok) new Audio(URL.createObjectURL(await r.blob())).play();
+      } catch {
+        /* the button coming back is the whole error report here */
+      }
+      btn.disabled = false;
+      btn.textContent = 'Hear it';
+    });
+
     body.querySelector('#voicetry').addEventListener('click', () => {
       stopSpeaking();
       const u = new SpeechSynthesisUtterance('This is how I will read your replies.');
@@ -1838,7 +1907,8 @@ async function showSettings() {
       // the one field changed — a partial patch would drop the other two.
       if (key.startsWith('speech.')) {
         const field = key.slice('speech.'.length);
-        if (field === 'rate') value = Number(value);
+        if (field === 'rate' || field === 'blendAmount') value = Number(value);
+        if (field === 'blendWith') value = value || null;
         if (field === 'voice') value = value || null;
         state.speech = { ...(state.speech || {}), [field]: value };
         cfg.speech = state.speech;
@@ -2967,6 +3037,14 @@ function readable(markdown) {
 
 function stopSpeaking() {
   speechSynthesis.cancel();
+  // The neural voice plays through an <audio> element rather than the speech
+  // API, so stopping has to reach both — a stop button that stops only one of
+  // two possible sounds is worse than no stop button.
+  if (speech.audio) {
+    speech.audio.pause();
+    speech.audio.src = '';
+    speech.audio = null;
+  }
   speech.on = false;
   document.querySelectorAll('.say.on').forEach((b) => {
     b.classList.remove('on');
@@ -2984,6 +3062,46 @@ function speakReply(el, markdown) {
   const text = readable(markdown);
   if (!text) return;
 
+  const busy = () => {
+    speech.on = true;
+    speech.el = el;
+    if (btn) {
+      btn.classList.add('on');
+      btn.innerHTML = icon('stop', 15);
+    }
+  };
+
+  // The neural voice, when it is installed and switched on. It takes seconds
+  // rather than milliseconds, so the button goes into its stopped state
+  // immediately and the sound arrives when it arrives — otherwise the first
+  // press looks like it did nothing.
+  if (state.speech?.engine === 'kokoro') {
+    busy();
+    fetch('/api/voice/speak', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text,
+        voice: state.speech?.kokoroVoice || 'af_heart',
+        speed: Number(state.speech?.rate) || 1,
+        blend: state.speech?.blendWith
+          ? { with: state.speech.blendWith, amount: Number(state.speech.blendAmount ?? 0.5) }
+          : null,
+      }),
+    })
+      .then((r) => (r.ok ? r.blob() : Promise.reject(new Error('voice failed'))))
+      .then((blob) => {
+        if (!speech.on || speech.el !== el) return; // stopped while it was thinking
+        const audio = new Audio(URL.createObjectURL(blob));
+        speech.audio = audio;
+        audio.onended = stopSpeaking;
+        audio.onerror = stopSpeaking;
+        audio.play();
+      })
+      .catch(() => stopSpeaking());
+    return;
+  }
+
   const utterance = new SpeechSynthesisUtterance(text);
   const chosen = speech.voices.find((v) => v.name === state.speech?.voice);
   if (chosen) utterance.voice = chosen;
@@ -2994,12 +3112,7 @@ function speakReply(el, markdown) {
   utterance.onend = stopSpeaking;
   utterance.onerror = stopSpeaking;
 
-  speech.on = true;
-  speech.el = el;
-  if (btn) {
-    btn.classList.add('on');
-    btn.innerHTML = icon('stop', 15);
-  }
+  busy();
   speechSynthesis.speak(utterance);
 }
 

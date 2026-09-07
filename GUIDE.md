@@ -503,23 +503,36 @@ microphone running behind a message you already sent.
 
 ## Hearing a reply
 
-Hover any reply and a speaker appears beside it. Click to have it read out;
-click again to stop. **Settings → Speech** turns on reading *every* reply as
-soon as it lands.
+The speaker button on any reply reads it aloud. Two engines, and the difference
+is speed against quality.
 
-The voices are **your computer's own** — 47 English ones on a typical Mac, more
-if you add them in system settings, and they appear in Reflect straight away.
-There is nothing to download.
+**Your computer's voices** are the default because they start instantly. On a
+Mac they are also, by default, the oldest and worst ones Apple ships — the good
+neural voices are a free download that macOS does not install for you. **System
+Settings → Accessibility → Spoken Content → System Voice → Manage Voices**, add
+Ava, Zoe or Evan, and they appear in Reflect immediately with no change here.
+Try that before anything else.
 
-It reads the words, not the punctuation: headings, bullets and link syntax are
-stripped, and code blocks are skipped entirely rather than read out as a
-paragraph of symbols.
+**Kokoro** is a neural voice that runs on this machine and sounds far better.
+It is optional, about 380MB once, and then entirely local — nothing is sent
+anywhere to speak.
 
-> A neural voice was the plan — Piper — and its macOS release ships without its
-> own libraries, so the binary cannot start. The system voices work on all three
-> platforms today and include whichever good ones you have already installed.
+```bash
+npm run install:voice
+```
 
----
+Then Settings → Speech → Which voice engine. It is not the default and should
+not be: measured here it generates roughly 0.5 to 1 times real time, so a
+sentence takes a few seconds to arrive. An assistant that pauses before
+speaking is worse than one that sounds plain, unless you have decided otherwise
+— which is the point of it being a choice.
+
+**Blending.** A Kokoro voice is not a recording, it is a list of 256 numbers.
+Averaging two of them produces a third that sounds like neither exactly, so you
+can slide between Emma and George and stop where you like. That is a voice that
+is yours, made without recording anybody — which is also why Reflect does not
+do voice cloning: copying a real person's voice is a different model and a
+different set of problems.
 
 ## Settings
 
