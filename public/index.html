@@ -123,22 +123,31 @@
   /* Collapsed: 56px of icons. Hiding the rail entirely would mean Memory,
      Skills, Folders and Tasks are only reachable by first restoring something
      you deliberately put away. */
-  body.rail-closed { --rail-w:56px; }
-  body.rail-closed .rail { padding:12px 8px; gap:10px; align-items:center; }
-  body.rail-closed .brand { padding:0; margin-top:22px; }
-  body.rail-closed .railtoggle { right:auto; left:50%; transform:translateX(-50%) rotate(180deg); }
-  /* :not(.mark) — the logo is a span too, and hiding it leaves the collapsed
-     rail with no identity at all. */
-  body.rail-closed .brand span:not(.mark),
-  body.rail-closed .glabel,
-  body.rail-closed .convs,
-  body.rail-closed .newbtn .word,
-  body.rail-closed .rail-foot .word { display:none; }
-  body.rail-closed .newbtn { text-align:center; padding:7px 0; font-size:16px; }
-  body.rail-closed .rail-foot { grid-template-columns:1fr; gap:4px; border-top:0; }
-  body.rail-closed .rail-foot button { padding:7px 0; justify-content:center; font-size:14px; border-color:transparent; }
-  body.rail-closed .rail-foot button:hover { background:var(--rail-hover); }
-  body.rail-closed .railtoggle { transform:rotate(180deg); }
+  /* Only where there is a rail to collapse.
+   *
+   * Below 820px the rail is a drawer, and a drawer is never half-open — it is
+   * off-screen or it is showing. Without this bound, collapsing the rail on a
+   * wide screen followed you into the drawer, which then opened as a 272px
+   * panel of unlabelled icons with a hole where the conversation list should
+   * be. The preference was being remembered somewhere it made no sense. */
+  @media (min-width:821px) {
+    body.rail-closed { --rail-w:56px; }
+    body.rail-closed .rail { padding:12px 8px; gap:10px; align-items:center; }
+    body.rail-closed .brand { padding:0; margin-top:22px; }
+    body.rail-closed .railtoggle { right:auto; left:50%; transform:translateX(-50%) rotate(180deg); }
+    /* :not(.mark) — the logo is a span too, and hiding it leaves the collapsed
+       rail with no identity at all. */
+    body.rail-closed .brand span:not(.mark),
+    body.rail-closed .glabel,
+    body.rail-closed .convs,
+    body.rail-closed .newbtn .word,
+    body.rail-closed .rail-foot .word { display:none; }
+    body.rail-closed .newbtn { text-align:center; padding:7px 0; font-size:16px; justify-content:center; }
+    body.rail-closed .rail-foot { grid-template-columns:1fr; gap:4px; border-top:0; }
+    body.rail-closed .rail-foot button { padding:7px 0; justify-content:center; font-size:14px; border-color:transparent; }
+    body.rail-closed .rail-foot button:hover { background:var(--rail-hover); }
+    body.rail-closed .railtoggle { transform:rotate(180deg); }
+  }
 
   .railtoggle { position:absolute; top:14px; right:8px; width:22px; height:22px; padding:0;
                 border:0; background:none; color:var(--ink-3); cursor:pointer; border-radius:6px;
@@ -172,7 +181,6 @@
   .rail-foot button .ic, .newbtn .ic { opacity:.72; }
   .rail-foot button:hover .ic, .newbtn:hover .ic { opacity:1; }
   .newbtn { display:flex; align-items:center; gap:8px; }
-  body.rail-closed .newbtn { justify-content:center; }
   .attach .ic, .mic .ic { margin:0; }
   .send .ic { margin:0 auto; }
   .railtoggle .ic { width:15px; height:15px; }
