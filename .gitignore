@@ -1,0 +1,18 @@
+node_modules/
+.DS_Store
+.claude/
+*.log
+.env
+
+# Never commit a user's memory. REFLECT_HOME lives outside the repo by default,
+# but guard against anyone pointing it here.
+.reflect/
+
+# Vendored third-party renderers: generated from node_modules on install.
+public/vendor/
+vendor/llama/
+release/
+vendor/whisper/
+
+# Kept out of the repository on purpose — see DO-NOT-UPLOAD/README.txt
+DO-NOT-UPLOAD/
