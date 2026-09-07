@@ -517,6 +517,11 @@ Try that before anything else.
 It is optional, about 380MB once, and then entirely local — nothing is sent
 anywhere to speak.
 
+It is for people running Reflect from source, because installing it is an npm
+command and the packaged app has no way to run one. Keeping it out of the
+installer is also what keeps the installer at 113MB rather than 191MB, for a
+voice most people will not turn on.
+
 ```bash
 npm run install:voice
 ```
