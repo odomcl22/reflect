@@ -19,6 +19,7 @@ import { search as webSearch } from '../web/Search.js';
 import { fetchPage } from '../web/Fetch.js';
 import * as Tasks from '../tasks/Tasks.js';
 import * as Deliver from '../deliver/Deliver.js';
+import * as Skills from '../skills/Skills.js';
 
 /**
  * Which tools to offer this turn.
@@ -63,7 +64,7 @@ export function toolsFor({ justWrote = false, grants = [], disabled = [], web = 
       : DELIVER_SCHEMAS.filter((t) => t.function.name !== 'message');
 
   const off = new Set(disabled);
-  return [...memory, ...folder, ...outward, ...TASK_SCHEMAS, ...reach].filter((t) => !off.has(t.function.name));
+  return [...memory, ...folder, ...outward, ...TASK_SCHEMAS, ...reach, ...SKILL_SCHEMAS].filter((t) => !off.has(t.function.name));
 }
 
 /** Everything that could be offered, for a screen that lets you choose. */
@@ -72,9 +73,10 @@ export function allTools() {
     name.startsWith('memory_') ? 'Memory'
     : name.startsWith('web_') ? 'The web'
     : name.startsWith('task_') ? 'Tasks'
+    : name.startsWith('skill_') ? 'Skills'
     : ['notify', 'message', 'mail_draft'].includes(name) ? 'Reaching you'
     : 'Connected folders';
-  return [...TOOL_SCHEMAS, ...FOLDER_SCHEMAS, ...WEB_SCHEMAS, ...TASK_SCHEMAS, ...DELIVER_SCHEMAS].map((t) => ({
+  return [...TOOL_SCHEMAS, ...FOLDER_SCHEMAS, ...WEB_SCHEMAS, ...TASK_SCHEMAS, ...DELIVER_SCHEMAS, ...SKILL_SCHEMAS].map((t) => ({
     name: t.function.name,
     description: t.function.description,
     group: group(t.function.name),
@@ -87,6 +89,59 @@ export function allTools() {
  * Three tools with three different costs, and the descriptions say so, because
  * a model choosing between them should know that one of them cannot be undone.
  */
+/**
+ * Writing down a way of working, so it does not have to be explained again.
+ *
+ * The one tool here that changes what Reflect does on *later* turns. Everything
+ * else acts once and stops; a skill is standing instructions, which is exactly
+ * what makes it worth having and exactly what makes it worth being careful
+ * about — a page Reflect just read could ask it to write itself a habit.
+ *
+ * So a skill made this way arrives switched off. The person turns it on in
+ * Skills, having read it. That is one click against the possibility of the
+ * model quietly acquiring instructions nobody chose, and the click is the
+ * whole safety property: a dormant file changes nothing.
+ *
+ * It also refuses to overwrite. A skill somebody wrote by hand is theirs, and
+ * silently replacing it would be the same failure as a supersession that
+ * deletes the thing it was meant to replace.
+ */
+export const SKILL_SCHEMAS = [
+  {
+    type: 'function',
+    function: {
+      name: 'skill_create',
+      description:
+        'Write down a repeatable way of working so it does not have to be explained again — ' +
+        'a format you always want, a checklist, a house style. Use it when the user says to remember ' +
+        'how they like something done, or asks you to turn what just happened into a reusable habit. ' +
+        'The skill is saved switched off; the user turns it on after reading it.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'Short, lowercase words joined by hyphens, like standup-notes.',
+          },
+          description: {
+            type: 'string',
+            description:
+              'One sentence saying what it does and when to use it. This is what gets read later ' +
+              'when deciding whether the skill applies, so say the trigger, not just the effect.',
+          },
+          instructions: {
+            type: 'string',
+            description:
+              'The instructions themselves, in Markdown, written as directions to follow. ' +
+              'Concrete and short. Say what to do, not what a good outcome would look like.',
+          },
+        },
+        required: ['name', 'description', 'instructions'],
+      },
+    },
+  },
+];
+
 export const DELIVER_SCHEMAS = [
   {
     type: 'function',
@@ -418,6 +473,40 @@ export async function runTool(name, args = {}, context = {}) {
             text: `${instruction} — ${saved.schedule.text}`,
             written: true,
           },
+        };
+      }
+
+      case 'skill_create': {
+        const name = String(args.name || '').trim().toLowerCase().replace(/\s+/g, '-');
+        if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(name)) {
+          return { result: 'A skill name is lowercase words joined by hyphens, like standup-notes.' };
+        }
+        // Never over the top of one that exists. A skill somebody wrote is
+        // theirs, and this tool is not a way to edit it.
+        const already = await Skills.readSkill(name).catch(() => null);
+        if (already) {
+          return { result: `There is already a skill called "${name}". Pick another name, or tell the user to edit that one in Skills.` };
+        }
+
+        const description = String(args.description || '').trim().slice(0, 1000);
+        const instructions = String(args.instructions || '').trim();
+        if (!description || !instructions) {
+          return { result: 'A skill needs both a description — what it does and when — and the instructions themselves.' };
+        }
+
+        // enabled:false is the safety property, not a formality.
+        const markdown =
+          `---\nname: ${name}\ndescription: ${description.replace(/\n+/g, ' ')}\nenabled: false\n---\n\n${instructions}\n`;
+        const made = await Skills.writeSkill(name, markdown);
+        if (made?.problems?.length) {
+          return { result: `That skill did not save: ${made.problems.join('; ')}` };
+        }
+
+        return {
+          result:
+            `Saved as the skill "${name}", switched off. Tell the user it is in Skills, that it is off ` +
+            `until they turn it on, and say in one line what it will do.`,
+          write: { action: 'save', target: `skills/${name}/SKILL.md`, text: description, written: true },
         };
       }
 

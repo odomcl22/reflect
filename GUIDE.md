@@ -380,6 +380,16 @@ Skills live in `~/.reflect/skills/<name>/SKILL.md`.
 
 ---
 
+**Reflect can write one for you.** Say "always format my standups as three
+bullets — save that so I don't have to repeat it" and it writes the skill from
+what you just told it.
+
+It arrives **switched off**. You turn it on in Skills, having read it. That is
+deliberate and it is the whole safety property: a skill is standing
+instructions for every future turn, and a web page Reflect had just read could
+otherwise talk it into giving itself a habit nobody chose. A dormant file
+changes nothing. It also never writes over a skill you wrote yourself.
+
 ## Folders — letting Reflect read and write your files
 
 This is the only way Reflect touches anything outside its own memory folder.
