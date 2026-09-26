@@ -665,6 +665,11 @@
   .reach { color:var(--ink-3); white-space:nowrap; }
   .reach.send { color:var(--ink); }
 
+  .starts { display:flex; flex-direction:column; gap:7px; margin:16px auto 0; max-width:440px; }
+  .start { font:inherit; font-size:13.5px; text-align:left; padding:9px 13px; cursor:pointer;
+           border:1px solid var(--line); border-radius:9px; background:var(--surface); color:var(--ink-2); }
+  .start:hover { border-color:var(--accent); color:var(--accent-ink); }
+
   .setup { display:flex; flex-direction:column; gap:6px; margin:14px auto; max-width:430px; text-align:left; }
   .setup code { font-family:var(--mono); font-size:12.5px; background:var(--surface);
                 border:1px solid var(--line); border-radius:8px; padding:8px 11px;
@@ -2781,6 +2786,34 @@ async function showMirror() {
   } catch {
     return; // The plain empty state is a fine answer.
   }
+  // A first run is not a return visit. "Where should we pick up?" asks about a
+  // history that does not exist yet, which reads as the app mistaking you for
+  // somebody else — and it wastes the one moment when saying who you are is
+  // obviously the thing to do.
+  if (page?.firstRun) {
+    empty.querySelector('h2').textContent = 'Tell me something worth remembering.';
+    const sub = empty.querySelector('#emptysub');
+    if (sub) {
+      sub.innerHTML =
+        'Everything you say is kept as Markdown files on this machine, which you can read and edit. ' +
+        'The more it knows, the less you have to repeat yourself. Somewhere to start:' +
+        '<div class="starts">' +
+        ['Remember this: I am a teacher, and I write best in the morning.',
+         'I am starting a project. Let me tell you about it.',
+         'What do you know about me so far?']
+          .map((t) => `<button type="button" class="start" data-say="${esc(t)}">${esc(t)}</button>`)
+          .join('') +
+        '</div>';
+      sub.querySelectorAll('[data-say]').forEach((b) =>
+        b.addEventListener('click', () => {
+          $('input').value = b.dataset.say;
+          $('input').focus();
+        })
+      );
+    }
+    return;
+  }
+
   if (!page || page.empty) {
     // Nothing to reflect yet — but the notice machinery may still have its one
     // thing to say, exactly as before the mirror existed.

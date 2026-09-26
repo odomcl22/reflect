@@ -168,8 +168,22 @@ export async function todayPage({ now = new Date() } = {}) {
     promisesDue(now).catch(() => []),
   ]);
 
+  // Nothing said yet, and nothing known. Worth telling apart from a quiet
+  // Tuesday: one wants a page about your week, the other wants a way in.
+  // Asking "where should we pick up" on the first run is a question about a
+  // history the person does not have, which reads as the app mistaking them
+  // for somebody else.
+  let firstRun = false;
+  try {
+    const [said, known] = await Promise.all([Conversations.list(), Memory.readProfile()]);
+    firstRun = !said.length && !known.trim();
+  } catch {
+    firstRun = false; // Never guess this one wrong in the direction of nagging.
+  }
+
   const page = {
     date: now.toISOString().slice(0, 10),
+    firstRun,
     anniversary: ann,
     // Things you said you would do, in your own words. First on the page
     // because it is the only section that is about today rather than about
