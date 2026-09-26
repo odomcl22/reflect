@@ -104,3 +104,28 @@ test('a transcript has no line breaks in it', async () => {
   const source = await fsp.readFile(new URL('../src/speech/Whisper.js', import.meta.url), 'utf8');
   assert.match(source, /replace\(\/\\s\+\/g, ' '\)/, 'segment newlines must be collapsed');
 });
+
+// ────────────────────────────────────────────────── the first sixty seconds
+
+/**
+ * What a stranger sees before anything is installed.
+ *
+ * Measured on a machine with no runtime: the page asked where to pick up, the
+ * send button looked ready, and pressing it hung for ten seconds and then
+ * printed "fetch failed" — a true statement about a socket and a useless one
+ * about what to do next. That is the whole first impression, and it was the
+ * weakest thing in the product.
+ */
+test('the empty model list cannot be sent as a model name', async () => {
+  const html = await fsp.readFile(new URL('../public/index.html', import.meta.url), 'utf8');
+  const placeholder = /<option(?![^>]*value=)[^>]*>no models/i.test(html);
+  assert.ok(!placeholder, 'a valueless placeholder makes the select report its own label as the model');
+  assert.match(html, /<option value="">no models/i, 'the placeholder must carry an empty value');
+});
+
+test('there is somewhere to send someone with no model', async () => {
+  const html = await fsp.readFile(new URL('../public/index.html', import.meta.url), 'utf8');
+  assert.match(html, /function setupHelp/, 'no first-run help exists');
+  assert.match(html, /ollama pull/i, 'the help has to name the actual command');
+  assert.match(html, /if \(!state\.model\) \{\s*\n\s*setupHelp/, 'send must refuse before the network, not after');
+});

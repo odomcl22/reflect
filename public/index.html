@@ -665,6 +665,11 @@
   .reach { color:var(--ink-3); white-space:nowrap; }
   .reach.send { color:var(--ink); }
 
+  .setup { display:flex; flex-direction:column; gap:6px; margin:14px auto; max-width:430px; text-align:left; }
+  .setup code { font-family:var(--mono); font-size:12.5px; background:var(--surface);
+                border:1px solid var(--line); border-radius:8px; padding:8px 11px;
+                color:var(--ink-2); user-select:all; }
+
   /* the ledger — what left, counted */
   .note-b { font:inherit; color:inherit; background:none; border:0; padding:0; cursor:pointer;
             text-decoration:underline; text-underline-offset:2px; text-decoration-thickness:1px; }
@@ -2061,7 +2066,11 @@ async function loadModels() {
   state.model = current;
   $('model').innerHTML = models.map((m) =>
     `<option value="${m.name}"${m.name === current ? ' selected' : ''}>${m.name}${m.cloud ? ' (cloud)' : ''}</option>`
-  ).join('') || '<option>no models</option>';
+  // value="" matters: without it the select reports its own label, "no models"
+  // gets sent as the model name, and the server's guard — which checks for an
+  // absent model, not a silly one — waves it through to a runtime that has
+  // never heard of it. The person then waits ten seconds for "fetch failed".
+  ).join('') || '<option value="">no models yet</option>';
 }
 
 // ---------- conversations ----------
@@ -2761,6 +2770,11 @@ async function showMirror() {
   const empty = document.querySelector('#canvas .empty');
   if (!empty || empty.querySelector('.mirror')) return;
 
+  // Nothing to think with beats anything else this page could say. A first run
+  // with no runtime is the one state where the empty page has a job other than
+  // reflecting: it has to get the person to a working install.
+  if (!state.model) return setupHelp();
+
   let page = null;
   try {
     page = await (await fetch('/api/today')).json();
@@ -2878,6 +2892,33 @@ async function showMirror() {
   // The one-at-a-time notice appears under the page, with its Dismiss intact —
   // the page's own copy, which is null when a section already says it.
   showNotice(page.notice);
+}
+
+/**
+ * What to do when there is nothing to answer with.
+ *
+ * The first minute decides whether somebody keeps the app, and until now that
+ * minute was: a headline asking where to pick up, an empty page, "Ollama
+ * offline" in small red text in the far corner, and — if they typed anything —
+ * a raw socket error. Every one of those is true and none of them is useful.
+ *
+ * So say the thing they can act on, in the middle of the screen, where they
+ * are already looking.
+ */
+function setupHelp(headline = 'Reflect needs a model to think with.') {
+  const empty = document.querySelector('.empty');
+  if (!empty) return;
+  empty.querySelector('h2').textContent = headline;
+  const sub = empty.querySelector('#emptysub');
+  if (sub) {
+    sub.innerHTML =
+      'Reflect runs models on your own machine, so it needs one installed. ' +
+      'The shortest way there:' +
+      '<div class="setup"><code>brew install ollama &amp;&amp; ollama serve</code>' +
+      '<code>ollama pull qwen3:4b</code></div>' +
+      'Then reload this page. Already have one running somewhere else — LM Studio, ' +
+      'llama.cpp, another machine? Point Reflect at it under <b>Runtime</b>.';
+  }
 }
 
 /**
@@ -3535,6 +3576,15 @@ async function send() {
   // is not the one that was sent.
   let text = $('input').value.trim();
   if (!text && !queued.length) return;
+
+  // Nothing to answer with. Said here, immediately, instead of sending the
+  // message to a runtime that is not there and letting the person watch a
+  // spinner for ten seconds before "fetch failed" appears — which is a true
+  // statement about a socket and a useless one about what to do next.
+  if (!state.model) {
+    setupHelp('Reflect has no model to answer with yet.');
+    return;
+  }
 
   // Mid-reply, this becomes a queue rather than a no-op. One at a time, in
   // order, once the current answer is done.
