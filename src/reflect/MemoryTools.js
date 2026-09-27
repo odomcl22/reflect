@@ -20,6 +20,7 @@ import { fetchPage } from '../web/Fetch.js';
 import * as Tasks from '../tasks/Tasks.js';
 import * as Deliver from '../deliver/Deliver.js';
 import * as Skills from '../skills/Skills.js';
+import * as Shortcuts from '../desktop/Shortcuts.js';
 
 /**
  * Which tools to offer this turn.
@@ -36,7 +37,7 @@ import * as Skills from '../skills/Skills.js';
  * cannot be talked into calling it, which is a cheaper defence than checking
  * afterwards — though the check happens afterwards too.
  */
-export function toolsFor({ justWrote = false, grants = [], disabled = [], web = false, contacts = 0, skills = 0 } = {}) {
+export function toolsFor({ justWrote = false, grants = [], disabled = [], web = false, contacts = 0, skills = 0, shortcuts = 0 } = {}) {
   const memory = justWrote ? TOOL_SCHEMAS.filter((t) => t.function.name !== 'memory_write') : TOOL_SCHEMAS;
   const folder = !grants.length
     ? []
@@ -60,11 +61,13 @@ export function toolsFor({ justWrote = false, grants = [], disabled = [], web = 
   const reach = !Deliver.available()
     ? []
     : contacts > 0
-      ? DELIVER_SCHEMAS
+      ? [...DELIVER_SCHEMAS]
       : DELIVER_SCHEMAS.filter((t) => t.function.name !== 'message');
 
   const off = new Set(disabled);
   const learn = skills > 0 ? [SKILL_USE_SCHEMA, ...SKILL_SCHEMAS] : SKILL_SCHEMAS;
+  // Absent until somebody has allowed at least one — the same rule as messaging.
+  if (shortcuts > 0 && Shortcuts.available()) reach.push(SHORTCUT_SCHEMA);
   return [...memory, ...folder, ...outward, ...TASK_SCHEMAS, ...reach, ...learn].filter((t) => !off.has(t.function.name));
 }
 
@@ -75,9 +78,10 @@ export function allTools() {
     : name.startsWith('web_') ? 'The web'
     : name.startsWith('task_') ? 'Tasks'
     : name.startsWith('skill_') ? 'Skills'
+    : name === 'run_shortcut' ? 'Your Mac'
     : ['notify', 'message', 'mail_draft'].includes(name) ? 'Reaching you'
     : 'Connected folders';
-  return [...TOOL_SCHEMAS, ...FOLDER_SCHEMAS, ...WEB_SCHEMAS, ...TASK_SCHEMAS, ...DELIVER_SCHEMAS, SKILL_USE_SCHEMA, ...SKILL_SCHEMAS].map((t) => ({
+  return [...TOOL_SCHEMAS, ...FOLDER_SCHEMAS, ...WEB_SCHEMAS, ...TASK_SCHEMAS, ...DELIVER_SCHEMAS, SHORTCUT_SCHEMA, SKILL_USE_SCHEMA, ...SKILL_SCHEMAS].map((t) => ({
     name: t.function.name,
     description: t.function.description,
     group: group(t.function.name),
@@ -107,6 +111,31 @@ export function allTools() {
  * silently replacing it would be the same failure as a supersession that
  * deletes the thing it was meant to replace.
  */
+/**
+ * Running one of the person's own macOS Shortcuts.
+ *
+ * The desktop reach Reflect can offer a local model: the person built the
+ * automation, so the model only chooses which and when. Offered only when at
+ * least one shortcut has been allowed.
+ */
+export const SHORTCUT_SCHEMA = {
+  type: 'function',
+  function: {
+    name: 'run_shortcut',
+    description:
+      'Run one of the user\'s macOS Shortcuts by its exact name. Use it when the user asks for something ' +
+      'one of their allowed shortcuts does. Some shortcuts return text, which comes back to you.',
+    parameters: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'The exact name of an allowed shortcut.' },
+        input: { type: 'string', description: 'Optional text to hand the shortcut as its input.' },
+      },
+      required: ['name'],
+    },
+  },
+};
+
 /** Loading a skill, as opposed to writing one. Offered only when there is one to load. */
 export const SKILL_USE_SCHEMA = {
   type: 'function',
@@ -494,6 +523,15 @@ export async function runTool(name, args = {}, context = {}) {
             text: `${instruction} — ${saved.schedule.text}`,
             written: true,
           },
+        };
+      }
+
+      case 'run_shortcut': {
+        const done = await Shortcuts.runShortcut({ name: args.name, input: args.input });
+        if (!done.ok) return { result: `That shortcut did not run. ${done.reason}` };
+        return {
+          result: done.output ? `Ran "${done.name}". It returned:\n${done.output}` : `Ran "${done.name}". It returned nothing.`,
+          sent: { kind: 'shortcut', detail: done.name },
         };
       }
 

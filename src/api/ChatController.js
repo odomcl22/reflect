@@ -34,7 +34,8 @@ import { listGrants, grantsBrief } from '../grants/Grants.js';
 import { record as recordReceipt } from '../reflect/Receipts.js';
 import { record as recordPromise } from '../reflect/Promises.js';
 import { contacts as allowedContacts } from '../deliver/Deliver.js';
-import { readTask, toolsBlockedBy } from '../tasks/Tasks.js';
+import { readTask, toolsBlockedBy, mayRunShortcuts } from '../tasks/Tasks.js';
+import { allowed as allowedShortcuts } from '../desktop/Shortcuts.js';
 
 /** Bounded so a confused model cannot loop on tools forever. */
 const MAX_TOOL_ROUNDS = 3;
@@ -298,6 +299,8 @@ export function createChatHandler({ runtime }) {
       // A turn you are present for is unaffected: you are the supervision.
       const running = req.body?.taskName ? await readTask(String(req.body.taskName)).catch(() => null) : null;
       const withheld = running ? toolsBlockedBy(running.reach) : [];
+      if (running && !mayRunShortcuts(running.instruction)) withheld.push('run_shortcut');
+      const shortcutsAllowed = await allowedShortcuts().catch(() => []);
       if (withheld.length) send({ type: 'scoped', withheld, task: running.name });
       const available = Assistants.toolsAllowedBy(
         assistant,
@@ -308,6 +311,7 @@ export function createChatHandler({ runtime }) {
           web: Boolean(config.web?.enabled),
           contacts: reachable.length,
           skills: skills.filter((x) => x.valid && x.enabled !== false).length,
+          shortcuts: shortcutsAllowed.length,
         })
       );
       let answer = '';

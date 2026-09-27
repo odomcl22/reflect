@@ -261,6 +261,17 @@ export function widerReach(a, b) {
   return rank(a) >= rank(b) ? (REACH.includes(a) ? a : 'none') : b;
 }
 
+/**
+ * Whether a task may run a shortcut: only when its own instruction says so.
+ *
+ * A shortcut can do anything the person built it to do — send, delete, buy —
+ * and a task runs with nobody watching. So the same rule as reaching out:
+ * read from the person's words, never set by the model. "Every morning, run my
+ * Morning Routine shortcut" may; "summarise the news" may not, even though the
+ * shortcut is allowed and the tool exists.
+ */
+export const mayRunShortcuts = (instruction) => /\bshortcuts?\b/i.test(String(instruction || ''));
+
 /** What a given reach actually permits, for the tool filter. */
 export function toolsBlockedBy(reach) {
   if (reach === 'send') return [];

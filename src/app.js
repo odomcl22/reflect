@@ -25,6 +25,7 @@ import { open as openPromises, settle as settlePromise } from './reflect/Promise
 import { summary as ledgerSummary, entries as ledgerEntries } from './reflect/Ledger.js';
 import * as Deliver from './deliver/Deliver.js';
 import * as Kokoro from './speech/Kokoro.js';
+import * as Shortcuts from './desktop/Shortcuts.js';
 import { shouldSleep, sleep as sleepPass } from './reflect/Sleep.js';
 import { sources as receiptSources } from './reflect/Receipts.js';
 import { versions as listVersions, readVersion, restore as restoreVersion, snapshot as takeVersion } from './reflect/Versions.js';
@@ -528,6 +529,28 @@ export async function createApp() {
   // one delivery here that reaches nobody but them.
   app.post('/api/delivery/test', wrap(async (_req, res) => {
     res.json(await Deliver.notify({ body: 'This is how Reflect will reach you.' }));
+  }));
+
+  // ---- shortcuts ----------------------------------------------------------
+  // Which of the person's own automations Reflect may run. Written here and
+  // nowhere else: no tool can add to it, because a shortcut can do anything
+  // its author built it to — including send and delete.
+  app.get('/api/shortcuts', wrap(async (_req, res) => {
+    res.json({
+      available: Shortcuts.available(),
+      installed: await Shortcuts.installed(),
+      allowed: await Shortcuts.allowed(),
+    });
+  }));
+
+  app.post('/api/shortcuts/allow', wrap(async (req, res) => {
+    const done = await Shortcuts.allow(req.body?.name);
+    if (!done.ok) return res.status(400).json(done);
+    res.json(done);
+  }));
+
+  app.post('/api/shortcuts/revoke', wrap(async (req, res) => {
+    res.json(await Shortcuts.revoke(req.body?.name));
   }));
 
   // ---- the voice ----------------------------------------------------------

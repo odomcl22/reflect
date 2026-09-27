@@ -665,6 +665,10 @@
   .reach { color:var(--ink-3); white-space:nowrap; }
   .reach.send { color:var(--ink); }
 
+  .sclist { max-height:220px; overflow:auto; margin-top:8px; border:1px solid var(--line);
+            border-radius:8px; padding:6px 10px; display:flex; flex-direction:column; gap:2px; }
+  .scitem { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--ink-2); cursor:pointer; padding:2px 0; }
+
   .modelwarn { max-width:640px; margin:0 auto 6px; font-size:12px; line-height:1.5;
                color:var(--ink-3); text-align:center; }
   .modelwarn.tiny { color:#8A5A00; }
@@ -1595,11 +1599,12 @@ async function showSettings() {
   if (!$('setbox').open) $('setbox').showModal();
   body.innerHTML = '<p class="quiet">Loading…</p>';
 
-  const [cfg, { models }, delivery, kokoro] = await Promise.all([
+  const [cfg, { models }, delivery, kokoro, shortcuts] = await Promise.all([
     (await fetch('/api/settings')).json(),
     (await fetch('/api/models')).json(),
     fetch('/api/delivery').then((r) => r.json()).catch(() => ({ available: false, contacts: [] })),
     fetch('/api/voice').then((r) => r.json()).catch(() => ({ installed: false, model: false, voices: [] })),
+    fetch('/api/shortcuts').then((r) => r.json()).catch(() => ({ available: false, installed: [], allowed: [] })),
   ]);
 
   const check = (key, label, note, on) => `<div class="row">
@@ -1676,6 +1681,22 @@ async function showSettings() {
       <div class="sub">Reflect opens a draft in Mail with everything filled in. It never presses send.</div>
     </div>
     ` : ''}
+
+    ${shortcuts.available ? `
+    <div class="glabel">Your Mac</div>
+    <div class="row">
+      <h4>Shortcuts Reflect may run</h4>
+      <div class="sub">
+        Your own Shortcuts are how Reflect works in other apps — you build the automation, Reflect
+        runs it when you ask, or on a schedule. A shortcut can do anything you built it to, including
+        send and delete, so only the ones ticked here can be run at all.
+        ${shortcuts.installed.length
+          ? `<div class="sclist">${shortcuts.installed
+              .map((n) => `<label class="scitem"><input type="checkbox" data-sc="${esc(n)}"${shortcuts.allowed.includes(n) ? ' checked' : ''} /> ${esc(n)}</label>`)
+              .join('')}</div>`
+          : '<div class="p" style="margin-top:6px">No shortcuts on this Mac yet. Make one in the Shortcuts app and reopen this panel.</div>'}
+      </div>
+    </div>` : ''}
 
     <div class="glabel">Replies</div>
     ${check('artifacts', 'Let Reflect draw charts and build pages', 'Costs about a second before the first word. Turn it off if you only ever want prose.', cfg.artifacts !== false)}
@@ -1808,6 +1829,16 @@ async function showSettings() {
   // The voices are a property of the machine, not of Reflect, and the list
   // arrives asynchronously — so it is filled in after the panel is drawn rather
   // than rendered with it.
+  body.querySelectorAll('[data-sc]').forEach((box) =>
+    box.addEventListener('change', async () => {
+      await fetch(`/api/shortcuts/${box.checked ? 'allow' : 'revoke'}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: box.dataset.sc }),
+      });
+    })
+  );
+
   // Adding someone is a person's decision, so it happens here and only here.
   if (delivery.available) {
     const list = body.querySelector('#contacts');
@@ -3546,6 +3577,7 @@ function setSent(el, sent) {
   const what =
     sent.kind === 'notify' ? 'Shown on this screen'
     : sent.kind === 'message' ? 'Sent as a message'
+    : sent.kind === 'shortcut' ? 'Ran your shortcut'
     : 'Draft opened in Mail, not sent';
   chip.innerHTML = `${what}${sent.detail ? ` — <span class="p">${esc(sent.detail)}</span>` : ''}`;
   el.prepend(chip);

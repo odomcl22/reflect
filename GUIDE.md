@@ -107,6 +107,34 @@ be a false one.
 
 ---
 
+## Working in your other apps
+
+Reflect works in your desktop apps through **your own macOS Shortcuts**. You
+build the automation in the Shortcuts app — "export today's notes to PDF",
+"start a focus session", "log a glass of water" — and Reflect runs it by name,
+when you ask or on a schedule. Some shortcuts return text, and Reflect reads it.
+
+Tick the ones it may run in **Settings → Your Mac**. None are ticked to begin
+with, and while none are, Reflect has no way to run one at all. A shortcut can
+do anything you built it to — send, delete, buy — which is why the list is
+yours to write and nothing Reflect says can add to it.
+
+A **task** may run a shortcut only if its own instruction says so: "every
+morning, run my Morning Routine shortcut" can; "summarise the news" cannot,
+even with the shortcut ticked.
+
+Two limits worth knowing. A shortcut that stops to ask a question has nobody to
+answer it when Reflect runs it, and gives up after a minute. And what a
+shortcut does on the network is its own business — the ledger counts what
+Reflect sends, not what your shortcuts do.
+
+Why not have the model watch the screen and click? Because it needs a far
+larger model than the ones Reflect runs to do that reliably, and it is at its
+most dangerous exactly when it would be most useful: unattended, able to press
+anything. A shortcut does the same thing every time, because you built it to.
+
+---
+
 ## What a task is allowed to do
 
 A task runs while nobody is watching. That is the point of it, and it is also
