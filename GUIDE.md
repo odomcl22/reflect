@@ -138,8 +138,18 @@ run, not Reflect's whole environment. If a plugin's connector needs a secret
 from your environment — otherwise a plugin could name any secret you have.
 Whatever a connector returns is treated as data, not instructions.
 
-What does not work yet: services that make you sign in through a browser
-(most of Google's and Microsoft's). Local servers and ones that take a token do.
+**Signing in.** For a service that makes you sign in, add its address and
+press **Sign in**. Reflect finds the service's sign-in page from the connector
+itself, registers itself with the service where the service allows that, and
+opens the page in your own browser — with its real address bar and your
+password manager. You sign in there; the browser comes back to Reflect on this
+machine, and Reflect keeps only the access the service grants, in a file only
+you can read. It never sees your password. Expired access renews quietly, and
+**Sign out** forgets it.
+
+Some services will not let apps register themselves. Reflect says so, and
+shows the address to register; paste the client ID the service gives you into
+the connector and sign in again.
 
 ---
 

@@ -28,6 +28,7 @@ import * as Kokoro from './speech/Kokoro.js';
 import * as Shortcuts from './desktop/Shortcuts.js';
 import * as Plugins from './skills/Plugins.js';
 import * as Connectors from './connectors/Connectors.js';
+import * as OAuth from './connectors/OAuth.js';
 import { shouldSleep, sleep as sleepPass } from './reflect/Sleep.js';
 import { sources as receiptSources } from './reflect/Receipts.js';
 import { versions as listVersions, readVersion, restore as restoreVersion, snapshot as takeVersion } from './reflect/Versions.js';
@@ -710,7 +711,7 @@ export async function createApp() {
   // contact: a connector can act, and the list of what may act is the
   // person's to write.
   app.get('/api/connectors', wrap(async (_req, res) => {
-    res.json({ connectors: await Connectors.list(), cap: Connectors.TOOL_CAP });
+    res.json({ connectors: await Connectors.listWithStatus(), cap: Connectors.TOOL_CAP });
   }));
 
   app.post('/api/connectors', wrap(async (req, res) => {
@@ -725,6 +726,41 @@ export async function createApp() {
 
   app.post('/api/connectors/:name/test', wrap(async (req, res) => {
     res.json(await Connectors.test(req.params.name));
+  }));
+
+  // Sign-in. Reflect sends the person to the service's own page in their own
+  // browser, and the browser comes back here — on this machine's loopback
+  // address — with a code. Reflect never sees a password.
+  app.post('/api/connectors/:name/signin', wrap(async (req, res) => {
+    const c = (await Connectors.list()).find((x) => x.name === req.params.name);
+    if (!c || c.type !== 'http') return res.status(404).json({ ok: false, reason: 'no such connector at an address' });
+    const redirectUri = `http://127.0.0.1:${req.socket.localPort}/api/connectors/oauth/callback`;
+    try {
+      res.json(await OAuth.begin(c, { redirectUri }));
+    } catch (err) {
+      res.status(400).json({ ok: false, reason: err.message });
+    }
+  }));
+
+  app.get('/api/connectors/oauth/callback', wrap(async (req, res) => {
+    const page = (title, line) =>
+      `<!doctype html><meta charset="utf-8"><title>${title}</title>` +
+      `<body style="font:16px system-ui;max-width:32rem;margin:18vh auto;padding:0 1rem;color:#222">` +
+      `<h2 style="font-weight:600">${title}</h2><p>${line}</p></body>`;
+    const esc = (v) => String(v).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
+    if (req.query.error) {
+      return res.status(400).send(page('Not signed in', esc(req.query.error_description || req.query.error)));
+    }
+    const done = await OAuth.finish(String(req.query.state || ''), String(req.query.code || ''));
+    res.status(done.ok ? 200 : 400).send(
+      done.ok
+        ? page('Signed in', `Reflect can now reach <b>${esc(done.name)}</b>. You can close this tab.`)
+        : page('Not signed in', esc(done.reason))
+    );
+  }));
+
+  app.post('/api/connectors/:name/signout', wrap(async (req, res) => {
+    res.json(await OAuth.signOut(req.params.name));
   }));
 
   app.delete('/api/connectors/:name', wrap(async (req, res) => {

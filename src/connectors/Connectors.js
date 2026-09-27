@@ -36,6 +36,7 @@
 import { readJSON, writeJSON } from '../store/FileStore.js';
 import { record as ledger } from '../reflect/Ledger.js';
 import { McpClient } from './Mcp.js';
+import * as OAuth from './OAuth.js';
 
 const FILE = 'connectors.json';
 const NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -73,6 +74,12 @@ export async function list() {
   return Array.isArray(state.connectors) ? state.connectors : [];
 }
 
+/** For the settings screen: each connector and whether it is signed in. Never the tokens. */
+export async function listWithStatus() {
+  const all = await list();
+  return Promise.all(all.map(async (c) => ({ ...c, ...(c.type === 'http' ? { auth: await OAuth.status(c.name) } : {}) })));
+}
+
 async function save(connectors) {
   await writeJSON(FILE, { connectors });
   forget();
@@ -106,7 +113,11 @@ export async function add(input = {}) {
     name,
     type: isHttp ? 'http' : 'stdio',
     ...(isHttp
-      ? { url: String(input.url), headers: plainObject(input.headers) }
+      ? {
+          url: String(input.url),
+          headers: plainObject(input.headers),
+          ...(input.clientId ? { oauthClient: { client_id: String(input.clientId), ...(input.clientSecret ? { client_secret: String(input.clientSecret) } : {}) } } : {}),
+        }
       : {
           command: String(input.command).trim(),
           args: Array.isArray(input.args) ? input.args.map(String) : splitArgs(input.args),
@@ -137,6 +148,8 @@ function splitArgs(text) {
 export async function remove(name) {
   const all = await list();
   await save(all.filter((c) => c.name !== name));
+  // A removed connector's tokens go with it.
+  await OAuth.signOut(name).catch(() => {});
   return { ok: true };
 }
 
@@ -167,7 +180,11 @@ async function open(connector) {
   if (live && !live.client.transport.closed) return live;
   if (live) pool.delete(connector.name);
 
-  const client = new McpClient(connector);
+  const client = new McpClient({
+    ...connector,
+    getToken: () => OAuth.tokenFor(connector.name),
+    refresh: () => OAuth.refresh(connector.name),
+  });
   await client.connect();
   const tools = await client.listTools();
   const entry = { client, tools };
@@ -185,7 +202,7 @@ export async function test(name) {
     return { ok: true, server: client.server, tools: tools.map((t) => ({ name: t.name, description: t.description || '' })) };
   } catch (err) {
     forget(name);
-    return { ok: false, reason: err.message };
+    return { ok: false, reason: err.message, needsSignIn: Boolean(err.needsSignIn) };
   }
 }
 

@@ -30,6 +30,14 @@ const START_TIMEOUT_MS = 20_000;
 
 class RpcError extends Error {}
 
+/** The connector wants the person to sign in. Distinct, so the UI can offer to. */
+export class NeedsSignIn extends RpcError {
+  constructor() {
+    super('this connector needs you to sign in — Settings → Connectors → Sign in');
+    this.needsSignIn = true;
+  }
+}
+
 /**
  * The environment a local server is started with.
  *
@@ -158,17 +166,22 @@ class StdioTransport {
 
 /** A server at a URL: POST in, JSON or an event stream out. */
 class HttpTransport {
-  constructor({ url, headers = {} } = {}) {
+  constructor({ url, headers = {}, getToken = null, refresh = null } = {}) {
     this.url = url;
     this.headers = headers;
     this.session = null;
     this.protocol = null;
+    // Supplied by the connector layer when a signed-in token exists. Kept out
+    // of this file so the protocol code never touches token storage.
+    this.getToken = getToken;
+    this.refresh = refresh;
   }
 
   async start() {}
 
-  async #post(body, timeoutMs) {
+  async #post(body, timeoutMs, token = undefined) {
     ledger({ kind: 'connector', url: this.url, detail: body.method || '' });
+    const bearer = token === undefined ? await this.getToken?.() : token;
     const res = await fetch(this.url, {
       method: 'POST',
       headers: {
@@ -176,6 +189,8 @@ class HttpTransport {
         Accept: 'application/json, text/event-stream',
         ...(this.session ? { 'Mcp-Session-Id': this.session } : {}),
         ...(this.protocol ? { 'MCP-Protocol-Version': this.protocol } : {}),
+        // A signed-in token, unless the person set their own header.
+        ...(bearer && !this.headers.Authorization ? { Authorization: `Bearer ${bearer}` } : {}),
         ...this.headers,
       },
       body: JSON.stringify(body),
@@ -187,10 +202,22 @@ class HttpTransport {
   }
 
   async request(id, method, params, timeoutMs) {
-    const res = await this.#post({ jsonrpc: '2.0', id, method, params }, timeoutMs);
-    if (res.status === 401 || res.status === 403) {
-      throw new RpcError('the connector refused the credentials — it may need a token, or sign-in Reflect cannot do yet');
+    let res = await this.#post({ jsonrpc: '2.0', id, method, params }, timeoutMs);
+    // An expired token is the ordinary case, not an error: refresh once and
+    // retry. Only if that fails is the person asked to sign in again.
+    if (res.status === 401 && this.refresh) {
+      const fresh = await this.refresh();
+      if (fresh) res = await this.#post({ jsonrpc: '2.0', id, method, params }, timeoutMs, fresh);
     }
+    if (res.status === 401) {
+      if (this.headers.Authorization) throw new RpcError('the connector refused the token it was given');
+      // Only a 401 that says how to sign in means "sign in". A bare 401 is a
+      // server that wants a token, and offering a sign-in page it does not
+      // have would send the person looking for something that is not there.
+      if (/bearer/i.test(res.headers.get('www-authenticate') || '')) throw new NeedsSignIn();
+      throw new RpcError('the connector refused the request — it may need a token');
+    }
+    if (res.status === 403) throw new RpcError('the connector refused access — the account may not be allowed this');
     if (!res.ok) throw new RpcError(`the connector answered ${res.status}`);
 
     const type = res.headers.get('content-type') || '';
@@ -239,7 +266,7 @@ export class McpClient {
     this.nextId = 1;
     this.transport =
       config.type === 'http' || config.url
-        ? new HttpTransport({ url: config.url, headers: config.headers })
+        ? new HttpTransport({ url: config.url, headers: config.headers, getToken: config.getToken, refresh: config.refresh })
         : new StdioTransport({ command: config.command, args: config.args, env: config.env, cwd: config.cwd });
   }
 

@@ -1732,8 +1732,15 @@ async function showSettings() {
               <span class="p">${c.type === 'http' ? esc(c.url) : 'runs on this Mac'}</span>
               ${c.source ? `<span class="tag">from ${esc(c.source)}</span>` : ''}
               ${c.needs?.length ? `<span class="tag warn">needs ${esc(c.needs.join(', '))}</span>` : ''}
+              ${c.type === 'http' && c.auth?.signedIn ? '<span class="tag ok">signed in</span>' : ''}
               ${c.aliases?.length ? `<span class="p">also: ${esc(c.aliases.join(', '))}</span>` : ''}
-              <span class="connacts"><button type="button" data-conntest>Test</button><button type="button" data-connrm class="danger">Remove</button></span>
+              <span class="connacts">${
+                c.type === 'http'
+                  ? c.auth?.signedIn
+                    ? '<button type="button" data-connout>Sign out</button>'
+                    : '<button type="button" data-connin>Sign in</button>'
+                  : ''
+              }<button type="button" data-conntest>Test</button><button type="button" data-connrm class="danger">Remove</button></span>
               <div class="connout"></div>
             </div>`
                 )
@@ -1745,11 +1752,13 @@ async function showSettings() {
           <input id="cwhat" placeholder="a command to run, like npx -y some-mcp-server — or an https:// address" />
           <input id="ctoken" placeholder="token, if the address needs one (optional)" type="password" autocomplete="off" />
           <input id="calias" placeholder="other words that mean it, like notes, jottings (optional)" />
+          <input id="cclient" placeholder="client ID — only if the service makes you register an app (optional)" autocomplete="off" />
           <button type="button" id="cadd2">Add connector</button>
           <div id="cerr2" class="p"></div>
         </div>
-        <div class="p" style="margin-top:6px">Local servers and token-protected addresses work. Services that make you
-        sign in through a browser — most of Google's and Microsoft's — do not yet.</div>
+        <div class="p" style="margin-top:6px">For a service that makes you sign in, add its address and press
+        <b>Sign in</b>: you sign in on the service's own page in your browser, and Reflect only ever holds the
+        access it grants — never your password.</div>
       </div>
     </div>
 
@@ -1894,6 +1903,35 @@ async function showSettings() {
         body: JSON.stringify({ enabled: e.target.checked }),
       });
     });
+    // Sign-in happens on the service's own page, in the person's own browser —
+    // Reflect never sees the password. It waits here for the browser to come
+    // back, then redraws.
+    row.querySelector('[data-connin]')?.addEventListener('click', async (e) => {
+      e.target.disabled = true;
+      out.textContent = 'Finding where to sign in…';
+      const r = await (await fetch(`/api/connectors/${encodeURIComponent(name)}/signin`, { method: 'POST' })).json().catch(() => ({ ok: false, reason: 'no answer' }));
+      if (!r.ok) {
+        e.target.disabled = false;
+        out.classList.add('bad');
+        out.textContent = r.reason + (r.redirectUri ? ` Redirect address: ${r.redirectUri}` : '');
+        return;
+      }
+      window.open(r.url, '_blank', 'noopener');
+      out.classList.remove('bad');
+      out.textContent = 'Sign in in your browser, then come back here.';
+      for (let i = 0; i < 90; i++) {
+        await new Promise((ok) => setTimeout(ok, 2000));
+        const { connectors } = await (await fetch('/api/connectors')).json().catch(() => ({ connectors: [] }));
+        if (connectors.find((x) => x.name === name)?.auth?.signedIn) return void showSettings();
+      }
+      e.target.disabled = false;
+      out.textContent = 'Did not hear back from the sign-in. Try again when ready.';
+    });
+    row.querySelector('[data-connout]')?.addEventListener('click', async () => {
+      await fetch(`/api/connectors/${encodeURIComponent(name)}/signout`, { method: 'POST' });
+      showSettings();
+    });
+
     row.querySelector('[data-conntest]').addEventListener('click', async (e) => {
       e.target.disabled = true;
       out.textContent = 'Connecting…';
@@ -1901,7 +1939,7 @@ async function showSettings() {
       e.target.disabled = false;
       out.textContent = r.ok
         ? `Works — ${r.tools.length} tool${r.tools.length === 1 ? '' : 's'}: ${r.tools.slice(0, 8).map((t) => t.name).join(', ')}${r.tools.length > 8 ? '…' : ''}`
-        : `Did not connect: ${r.reason}`;
+        : r.needsSignIn ? 'It needs you to sign in first — press Sign in.' : `Did not connect: ${r.reason}`;
       out.classList.toggle('bad', !r.ok);
     });
     row.querySelector('[data-connrm]').addEventListener('click', async () => {
@@ -1920,7 +1958,7 @@ async function showSettings() {
       name: body.querySelector('#cname2').value.trim(),
       aliases: body.querySelector('#calias').value.trim(),
       ...(isUrl
-        ? { url: what, headers: token ? { Authorization: `Bearer ${token}` } : {} }
+        ? { url: what, headers: token ? { Authorization: `Bearer ${token}` } : {}, clientId: body.querySelector('#cclient').value.trim() || undefined }
         : { command: parts[0] || '', args: parts.slice(1) }),
     };
     const r = await (await fetch('/api/connectors', {
