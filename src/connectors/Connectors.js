@@ -46,10 +46,24 @@ export const TOOL_CAP = 12;
 /** Words in a connector's name that say nothing about what it is for. */
 const GENERIC = new Set(['mcp', 'server', 'servers', 'the', 'and', 'for', 'app', 'api', 'tool', 'tools', 'local', 'official', 'client', 'plugin']);
 
+/**
+ * One form per word, so "my calendars" reaches a connector named calendar.
+ *
+ * Not a stemmer — three plural rules, applied to both sides alike, which is
+ * the part that matters: a rule that mangles "status" into "statu" does so to
+ * the message and the connector's name equally, and they still meet.
+ */
+const base = (w) =>
+  w.length > 4 && w.endsWith('ies') ? `${w.slice(0, -3)}y`
+  : w.endsWith('sses') ? w.slice(0, -2)
+  : w.length > 4 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1)
+  : w;
+
 const words = (text) =>
   String(text || '')
     .toLowerCase()
     .split(/[^a-z0-9]+/)
+    .map(base)
     .filter((w) => w.length >= 3 && !GENERIC.has(w));
 
 // ──────────────────────────────────────────────────────────────── the list

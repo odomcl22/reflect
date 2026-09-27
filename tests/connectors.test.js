@@ -158,3 +158,19 @@ test("a skill's own instructions route its connector", async () => {
   const turn = await C.forTurn(body);
   assert.ok(turn.connectors.includes('testbox'));
 });
+
+// "Calendars" should reach a connector named calendar; a plural is not a
+// different system. Both sides are reduced alike, so imperfect rules still meet.
+test('plural and singular reach the same connector', () => {
+  const cs = [
+    { name: 'google-calendar', enabled: true },
+    { name: 'issue-tracker', enabled: true },
+    { name: 'address-book', enabled: true },
+    { name: 'journal-entries', enabled: true },
+  ];
+  assert.equal(C.named('what is on my calendars', cs)[0]?.name, 'google-calendar');
+  assert.equal(C.named('any new issues?', cs)[0]?.name, 'issue-tracker');
+  assert.equal(C.named('look up the addresses', cs)[0]?.name, 'address-book');
+  assert.equal(C.named('add a journal entry', cs).map((c) => c.name).includes('journal-entries'), true);
+  assert.equal(C.named('restart the servers', [{ name: 'notes-server', enabled: true }]).length, 0, 'plural of a generic word is still generic');
+});
