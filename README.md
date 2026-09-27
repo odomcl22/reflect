@@ -50,6 +50,17 @@ put it back. Restoring is itself undoable.
 count taken at the socket: what went to the internet, what went to your own
 network, what never left. Zero is the normal reading.
 
+**It reaches your other systems, without drowning.** Connectors speak MCP, the
+standard the rest of the ecosystem uses, so thousands of existing servers work.
+A connector only comes into a conversation when you mention it — which is what
+keeps a local model able to choose between its tools.
+
+**It works in your other apps through your own Shortcuts** — automations you
+built, run by name, on request or on a schedule.
+
+**It reads the ecosystem's skills and plugins.** Import a folder; everything
+arrives switched off until you've read it.
+
 **You can print your year.** Journal, projects and decisions composed into a PDF
 you can put on a shelf. No service can offer this, because it would require
 having given you the files in the first place.

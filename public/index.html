@@ -670,6 +670,16 @@
   .plugresult .bad { color:#B03A2E; }
   .row h4 input[type=checkbox] { margin-right:6px; vertical-align:-1px; }
 
+  .connlist { margin-top:8px; display:flex; flex-direction:column; gap:6px; }
+  .conn { border:1px solid var(--line); border-radius:8px; padding:7px 10px; display:flex; flex-wrap:wrap; gap:6px 10px; align-items:center; font-size:13px; }
+  .conn .connacts { margin-left:auto; display:flex; gap:5px; }
+  .conn .connout { flex-basis:100%; font-size:12px; color:var(--ink-3); }
+  .conn .connout.bad { color:#B03A2E; }
+  .connadd { margin-top:10px; display:grid; grid-template-columns:1fr; gap:6px; }
+  .connadd input { font:inherit; font-size:12.5px; padding:6px 9px; border:1px solid var(--line); border-radius:7px; background:var(--ground); color:var(--ink); }
+  .connadd button { justify-self:start; }
+  .wrote.went.bad { color:#B03A2E; }
+
   .sclist { max-height:220px; overflow:auto; margin-top:8px; border:1px solid var(--line);
             border-radius:8px; padding:6px 10px; display:flex; flex-direction:column; gap:2px; }
   .scitem { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--ink-2); cursor:pointer; padding:2px 0; }
@@ -1604,12 +1614,13 @@ async function showSettings() {
   if (!$('setbox').open) $('setbox').showModal();
   body.innerHTML = '<p class="quiet">Loading…</p>';
 
-  const [cfg, { models }, delivery, kokoro, shortcuts] = await Promise.all([
+  const [cfg, { models }, delivery, kokoro, shortcuts, conn] = await Promise.all([
     (await fetch('/api/settings')).json(),
     (await fetch('/api/models')).json(),
     fetch('/api/delivery').then((r) => r.json()).catch(() => ({ available: false, contacts: [] })),
     fetch('/api/voice').then((r) => r.json()).catch(() => ({ installed: false, model: false, voices: [] })),
     fetch('/api/shortcuts').then((r) => r.json()).catch(() => ({ available: false, installed: [], allowed: [] })),
+    fetch('/api/connectors').then((r) => r.json()).catch(() => ({ connectors: [], cap: 12 })),
   ]);
 
   const check = (key, label, note, on) => `<div class="row">
@@ -1702,6 +1713,45 @@ async function showSettings() {
           : '<div class="p" style="margin-top:6px">No shortcuts on this Mac yet. Make one in the Shortcuts app and reopen this panel.</div>'}
       </div>
     </div>` : ''}
+
+    <div class="glabel">Connectors</div>
+    <div class="row">
+      <h4>Other systems Reflect can reach</h4>
+      <div class="sub">
+        A connector is how Reflect reaches something else — your notes app, an issue tracker, a
+        database — using MCP, the standard the rest of the ecosystem uses. It comes into a
+        conversation only when you mention it by name (or <code>@name</code>), so a small model
+        is not buried in tools it does not need. A scheduled task can use one only if its
+        instruction names it. Connectors can act — send, change, delete — so only you can add one.
+        <div class="connlist">${
+          conn.connectors.length
+            ? conn.connectors
+                .map(
+                  (c) => `<div class="conn" data-conn="${esc(c.name)}">
+              <label><input type="checkbox" data-connon${c.enabled !== false ? ' checked' : ''} /> <b>${esc(c.name)}</b></label>
+              <span class="p">${c.type === 'http' ? esc(c.url) : 'runs on this Mac'}</span>
+              ${c.source ? `<span class="tag">from ${esc(c.source)}</span>` : ''}
+              ${c.needs?.length ? `<span class="tag warn">needs ${esc(c.needs.join(', '))}</span>` : ''}
+              ${c.aliases?.length ? `<span class="p">also: ${esc(c.aliases.join(', '))}</span>` : ''}
+              <span class="connacts"><button type="button" data-conntest>Test</button><button type="button" data-connrm class="danger">Remove</button></span>
+              <div class="connout"></div>
+            </div>`
+                )
+                .join('')
+            : '<div class="p">None yet.</div>'
+        }</div>
+        <div class="connadd">
+          <input id="cname2" placeholder="name, like apple-notes" />
+          <input id="cwhat" placeholder="a command to run, like npx -y some-mcp-server — or an https:// address" />
+          <input id="ctoken" placeholder="token, if the address needs one (optional)" type="password" autocomplete="off" />
+          <input id="calias" placeholder="other words that mean it, like notes, jottings (optional)" />
+          <button type="button" id="cadd2">Add connector</button>
+          <div id="cerr2" class="p"></div>
+        </div>
+        <div class="p" style="margin-top:6px">Local servers and token-protected addresses work. Services that make you
+        sign in through a browser — most of Google's and Microsoft's — do not yet.</div>
+      </div>
+    </div>
 
     <div class="glabel">Replies</div>
     ${check('artifacts', 'Let Reflect draw charts and build pages', 'Costs about a second before the first word. Turn it off if you only ever want prose.', cfg.artifacts !== false)}
@@ -1834,6 +1884,52 @@ async function showSettings() {
   // The voices are a property of the machine, not of Reflect, and the list
   // arrives asynchronously — so it is filled in after the panel is drawn rather
   // than rendered with it.
+  // Connectors: switch, test, remove, add. All a person's decisions.
+  body.querySelectorAll('[data-conn]').forEach((row) => {
+    const name = row.dataset.conn;
+    const out = row.querySelector('.connout');
+    row.querySelector('[data-connon]').addEventListener('change', async (e) => {
+      await fetch(`/api/connectors/${encodeURIComponent(name)}/enabled`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: e.target.checked }),
+      });
+    });
+    row.querySelector('[data-conntest]').addEventListener('click', async (e) => {
+      e.target.disabled = true;
+      out.textContent = 'Connecting…';
+      const r = await (await fetch(`/api/connectors/${encodeURIComponent(name)}/test`, { method: 'POST' })).json().catch(() => ({ ok: false, reason: 'no answer' }));
+      e.target.disabled = false;
+      out.textContent = r.ok
+        ? `Works — ${r.tools.length} tool${r.tools.length === 1 ? '' : 's'}: ${r.tools.slice(0, 8).map((t) => t.name).join(', ')}${r.tools.length > 8 ? '…' : ''}`
+        : `Did not connect: ${r.reason}`;
+      out.classList.toggle('bad', !r.ok);
+    });
+    row.querySelector('[data-connrm]').addEventListener('click', async () => {
+      if (!(await askConfirm(`Remove ${name}?`, 'Reflect will no longer be able to reach it.', 'Remove'))) return;
+      await fetch(`/api/connectors/${encodeURIComponent(name)}`, { method: 'DELETE' });
+      row.remove();
+    });
+  });
+
+  body.querySelector('#cadd2')?.addEventListener('click', async () => {
+    const what = body.querySelector('#cwhat').value.trim();
+    const token = body.querySelector('#ctoken').value.trim();
+    const isUrl = /^https?:\/\//i.test(what);
+    const parts = [...what.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)].map((m) => m[1] ?? m[2] ?? m[3]);
+    const payload = {
+      name: body.querySelector('#cname2').value.trim(),
+      aliases: body.querySelector('#calias').value.trim(),
+      ...(isUrl
+        ? { url: what, headers: token ? { Authorization: `Bearer ${token}` } : {} }
+        : { command: parts[0] || '', args: parts.slice(1) }),
+    };
+    const r = await (await fetch('/api/connectors', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    })).json();
+    if (!r.ok) return void (body.querySelector('#cerr2').textContent = r.reason);
+    showSettings();
+  });
+
   body.querySelectorAll('[data-sc]').forEach((box) =>
     box.addEventListener('change', async () => {
       await fetch(`/api/shortcuts/${box.checked ? 'allow' : 'revoke'}`, {
@@ -3583,8 +3679,24 @@ function setSent(el, sent) {
     sent.kind === 'notify' ? 'Shown on this screen'
     : sent.kind === 'message' ? 'Sent as a message'
     : sent.kind === 'shortcut' ? 'Ran your shortcut'
+    : sent.kind === 'connector' ? 'Used a connector'
     : 'Draft opened in Mail, not sent';
   chip.innerHTML = `${what}${sent.detail ? ` — <span class="p">${esc(sent.detail)}</span>` : ''}`;
+  el.prepend(chip);
+}
+
+/**
+ * A quiet line saying what this turn had to work with.
+ *
+ * The server always said which skill a turn was using and which connectors it
+ * could reach; nothing drew it. A skill steering a reply, or a connector being
+ * in reach, should be as visible as a search going out — it is the same
+ * question: what shaped this answer.
+ */
+function setNote(el, text, tone = '') {
+  const chip = document.createElement('span');
+  chip.className = `wrote went${tone ? ` ${tone}` : ''}`;
+  chip.textContent = text;
   el.prepend(chip);
 }
 
@@ -3820,6 +3932,11 @@ async function send() {
         }
         else if (ev.type === 'web') { setWent(el, ev.web); scroll(); }
         else if (ev.type === 'sent') { setSent(el, ev.sent); scroll(); }
+        else if (ev.type === 'skills') { setNote(el, `Using ${ev.used.map((n) => `/${n}`).join(', ')}`); }
+        else if (ev.type === 'connectors') {
+          if (ev.using?.length) setNote(el, `Can reach ${ev.using.join(', ')} this turn`);
+          for (const f of ev.failed || []) setNote(el, `Could not reach ${f.name} — ${f.reason}`, 'bad');
+        }
         else if (ev.type === 'tool_call') {
           // Name the tool. "Working…" tells you nothing; "file_write" tells you
           // what it is about to do to your disk.

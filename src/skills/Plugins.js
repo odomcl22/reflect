@@ -45,6 +45,7 @@ import { readJSON, writeJSON, writeText, readText } from '../store/FileStore.js'
 import { parseFrontmatter } from '../store/MemoryFiles.js';
 import { parseSkill, readSkill, removeSkill, listSkills } from './Skills.js';
 import { homePath } from '../config.js';
+import * as Connectors from '../connectors/Connectors.js';
 
 const MANIFEST = 'plugins.json';
 const NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -189,13 +190,24 @@ export async function importFolder(input) {
     try {
       const parsed = JSON.parse(mcpText);
       const servers = parsed.mcpServers || parsed;
+      // Plugins point their own servers at their own files with
+      // ${CLAUDE_PLUGIN_ROOT}; that is resolved to where the plugin actually
+      // is. Other ${VARS} are left exactly as written. Filling them from
+      // Reflect's environment would let a plugin name any secret the person
+      // has — ${AWS_SECRET_ACCESS_KEY} — and have it handed over on first run.
+      const resolve = (v) => String(v).split('${CLAUDE_PLUGIN_ROOT}').join(root);
+      const needs = (vals) => [...new Set(vals.flatMap((v) => [...String(v).matchAll(/\$\{([A-Z0-9_]+)\}/g)].map((m) => m[1])))].filter((n) => n !== 'CLAUDE_PLUGIN_ROOT');
       for (const [name, cfg] of Object.entries(servers || {})) {
         if (!cfg || typeof cfg !== 'object') continue;
+        const env = cfg.env && typeof cfg.env === 'object' ? Object.fromEntries(Object.entries(cfg.env).map(([k, v]) => [k, resolve(v)])) : {};
+        const args = Array.isArray(cfg.args) ? cfg.args.map(resolve) : [];
         connectors.push({
           name,
-          type: cfg.type || (cfg.command ? 'stdio' : cfg.url ? 'http' : 'unknown'),
+          type: cfg.type === 'sse' ? 'http' : cfg.type || (cfg.command ? 'stdio' : cfg.url ? 'http' : 'unknown'),
           ...(cfg.url ? { url: String(cfg.url) } : {}),
-          ...(cfg.command ? { command: String(cfg.command), args: Array.isArray(cfg.args) ? cfg.args.map(String) : [] } : {}),
+          ...(cfg.command ? { command: resolve(cfg.command), args, env } : {}),
+          ...(cfg.headers && typeof cfg.headers === 'object' ? { headers: cfg.headers } : {}),
+          needs: needs([...Object.values(env), ...Object.values(cfg.headers || {}), ...args, cfg.url || '']),
         });
       }
     } catch {
@@ -230,6 +242,17 @@ export async function importFolder(input) {
       await writeText(join(paths().skills, s.name, ...parts), extra.text);
     }
     imported.push(s.name);
+  }
+
+  for (const c of connectors) {
+    const slug = String(c.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    if (c.type === 'unknown') {
+      c.status = 'not imported: neither a command nor an address';
+      continue;
+    }
+    const added = await Connectors.add({ ...c, name: slug, enabled: false, source: plugin });
+    c.as = slug;
+    c.status = added.ok ? 'added, switched off' : `not imported: ${added.reason}`;
   }
 
   const record = {
@@ -273,6 +296,10 @@ export async function remove(name) {
       await removeSkill(skill);
       removed.push(skill);
     }
+  }
+  // Its connectors go too — the ones still marked as its own.
+  for (const c of await Connectors.list()) {
+    if (c.source === name) await Connectors.remove(c.name);
   }
   await writeJSON(MANIFEST, { plugins: all.filter((p) => p.name !== name) });
   return { ok: true, removed };

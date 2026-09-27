@@ -27,6 +27,7 @@ import * as Deliver from './deliver/Deliver.js';
 import * as Kokoro from './speech/Kokoro.js';
 import * as Shortcuts from './desktop/Shortcuts.js';
 import * as Plugins from './skills/Plugins.js';
+import * as Connectors from './connectors/Connectors.js';
 import { shouldSleep, sleep as sleepPass } from './reflect/Sleep.js';
 import { sources as receiptSources } from './reflect/Receipts.js';
 import { versions as listVersions, readVersion, restore as restoreVersion, snapshot as takeVersion } from './reflect/Versions.js';
@@ -702,6 +703,33 @@ export async function createApp() {
   // Instructions you can teach it, in the open Agent Skills format: a folder
   // with a SKILL.md. Invalid ones are listed with their problems rather than
   // hidden, because a skill that silently does nothing is the worst outcome.
+
+  // ---- connectors ---------------------------------------------------------
+  // Added, switched and removed here, by a person, and nowhere else. A tool
+  // cannot add a connector, for the same reason it cannot add a folder or a
+  // contact: a connector can act, and the list of what may act is the
+  // person's to write.
+  app.get('/api/connectors', wrap(async (_req, res) => {
+    res.json({ connectors: await Connectors.list(), cap: Connectors.TOOL_CAP });
+  }));
+
+  app.post('/api/connectors', wrap(async (req, res) => {
+    const done = await Connectors.add(req.body || {});
+    res.status(done.ok ? 200 : 400).json(done);
+  }));
+
+  app.post('/api/connectors/:name/enabled', wrap(async (req, res) => {
+    const done = await Connectors.setEnabled(req.params.name, req.body?.enabled);
+    res.status(done.ok ? 200 : 404).json(done);
+  }));
+
+  app.post('/api/connectors/:name/test', wrap(async (req, res) => {
+    res.json(await Connectors.test(req.params.name));
+  }));
+
+  app.delete('/api/connectors/:name', wrap(async (req, res) => {
+    res.json(await Connectors.remove(req.params.name));
+  }));
 
   // ---- plugins ------------------------------------------------------------
   // Unpacked into skills (switched off), connectors (recorded, waiting), and a

@@ -140,3 +140,54 @@ test('a path that is not a folder fails plainly', async () => {
   assert.equal(r.ok, false);
   assert.match(r.reason, /no folder/i);
 });
+
+// ────────────────────────────────────────────── a plugin that brings a connector
+
+const Connectors = await import('../src/connectors/Connectors.js');
+const { fileURLToPath } = await import('node:url');
+
+test('a plugin that ships its own server: imported off, then on, then working', async () => {
+  const fixture = await fsp.readFile(fileURLToPath(new URL('./fixtures/mcp-server.mjs', import.meta.url)), 'utf8');
+  await write('withserver/server.mjs', fixture);
+  await write('withserver/.claude-plugin/plugin.json', '{"name":"calc-kit"}');
+  await write(
+    'withserver/.mcp.json',
+    JSON.stringify({
+      mcpServers: {
+        calculator: { command: process.execPath, args: ['${CLAUDE_PLUGIN_ROOT}/server.mjs'] },
+        needy: { command: 'node', args: ['x.js'], env: { TOKEN: '${GITHUB_TOKEN}' } },
+      },
+    })
+  );
+
+  const r = await Plugins.importFolder(path.join(outside, 'withserver'));
+  const calc = (await Connectors.list()).find((c) => c.name === 'calculator');
+  assert.equal(calc.enabled, false, 'a connector from a plugin arrived live');
+  assert.equal(calc.source, 'calc-kit');
+  assert.ok(!calc.args[0].includes('${CLAUDE_PLUGIN_ROOT}'), 'the plugin root was not resolved');
+
+  // Off means not routed, even when named.
+  assert.equal((await Connectors.forTurn('use the calculator')).schemas.length, 0);
+
+  await Connectors.setEnabled('calculator', true);
+  const turn = await Connectors.forTurn('use the calculator to add two numbers');
+  const addTool = Object.entries(turn.routes).find(([, v]) => v.tool === 'add');
+  assert.ok(addTool, 'enabled and named, but not offered');
+  const out = await Connectors.call(addTool[1], { a: 20, b: 22 });
+  assert.equal(out.text, '42');
+
+  // Named secrets are recorded as needed, never filled in from the environment.
+  const needy = r.connectors.find((c) => c.name === 'needy');
+  assert.deepEqual(needy.needs, ['GITHUB_TOKEN']);
+  process.env.GITHUB_TOKEN = 'real-secret-value';
+  const stored = (await Connectors.list()).find((c) => c.name === 'needy');
+  delete process.env.GITHUB_TOKEN;
+  assert.equal(stored.env.TOKEN, '${GITHUB_TOKEN}', 'a plugin was handed a secret it only named');
+});
+
+test('removing the plugin removes the connectors it brought', async () => {
+  await Plugins.remove('calc-kit');
+  const left = (await Connectors.list()).map((c) => c.name);
+  assert.ok(!left.includes('calculator') && !left.includes('needy'));
+  await Connectors.shutdown();
+});

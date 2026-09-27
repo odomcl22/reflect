@@ -253,6 +253,8 @@ async function refreshTrayMenu() {
 // is what makes that discoverable.
 app.on('window-all-closed', () => {});
 app.on('before-quit', () => {
+  // Local connectors are child processes; they leave when Reflect does.
+  import('../src/connectors/Connectors.js').then((c) => c.shutdown()).catch(() => {});
   quitting = true;
 });
 

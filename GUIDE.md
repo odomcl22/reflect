@@ -107,6 +107,42 @@ be a false one.
 
 ---
 
+## Connectors — reaching other systems
+
+A connector is how Reflect reaches something else — your notes app, an issue
+tracker, a database — using **MCP**, the standard the rest of the ecosystem
+uses. There are thousands of MCP servers; add one in **Settings → Connectors**
+with the command that runs it, or its address. **Test** says whether it
+answers and what it can do.
+
+**A connector only comes into a conversation when you mention it** — by name,
+as `@name`, or in the other words you gave it ("notes, jottings"). That is
+deliberate. A local model already carries a dozen tools and strains at it; five
+connectors could add eighty more, and it would stop being able to choose. So
+"what's in Linear" reaches Linear, and "what's the capital of France" reaches
+nothing. When a request is about one, Reflect offers up to twelve of its tools,
+the ones whose names best match what you asked.
+
+**A skill can bring its connector.** A skill whose instructions say "pull my
+issues from linear" reaches Linear when you use the skill, without you saying
+so twice.
+
+**A scheduled task can use a connector only if its instruction names it** —
+the same rule as messaging and shortcuts, for the same reason: nobody is
+watching it run.
+
+Only you can add a connector, and one that arrives from a plugin arrives
+switched off. A connector that runs on this machine gets only what it needs to
+run, not Reflect's whole environment. If a plugin's connector needs a secret
+(`${GITHUB_TOKEN}`), Reflect records that it does and **does not fill it in**
+from your environment — otherwise a plugin could name any secret you have.
+Whatever a connector returns is treated as data, not instructions.
+
+What does not work yet: services that make you sign in through a browser
+(most of Google's and Microsoft's). Local servers and ones that take a token do.
+
+---
+
 ## Working in your other apps
 
 Reflect works in your desktop apps through **your own macOS Shortcuts**. You

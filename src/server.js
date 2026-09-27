@@ -8,6 +8,9 @@ import { startScheduler } from './tasks/Scheduler.js';
 import { listTasks } from './tasks/Tasks.js';
 
 const { app, home, config, quietWork } = await createApp();
+const { shutdown: closeConnectors } = await import('./connectors/Connectors.js');
+// Local connectors are child processes. They leave when Reflect does.
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => closeConnectors().finally(() => process.exit(0)));
 
 // The scheduler belongs to the running server, not to createApp: the tests
 // build apps constantly and none of them should start a clock.
