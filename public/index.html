@@ -10,6 +10,22 @@
 <meta name="mobile-web-app-capable" content="yes" />
 <link rel="manifest" href="/manifest.webmanifest" />
 <title>Reflect</title>
+<script>
+  // Before first paint. The saved look arrives from the server a few requests
+  // into boot, and applying it only then showed a dark-mode user a flash of
+  // the light theme on every launch. This is the last look that was chosen,
+  // cached on this device; the server's copy still wins once it lands.
+  try {
+    const look = JSON.parse(localStorage.getItem('reflect.look') || '{}');
+    const root = document.documentElement;
+    if (look.theme === 'light' || look.theme === 'dark') root.dataset.theme = look.theme;
+    if (look.accent && look.accent !== 'blue') root.dataset.accent = look.accent;
+    if (look.width === 'wide') root.dataset.width = 'wide';
+    if (look.font && look.font !== 'sans') root.dataset.font = look.font;
+    const scale = { s: 0.92, m: 1, l: 1.1, xl: 1.22 }[look.textSize];
+    if (scale) root.style.setProperty('--reading-scale', scale);
+  } catch { /* nothing cached, or storage blocked — the defaults are fine */ }
+</script>
 <style>
   :root {
     --ground:#F7F8FA; --surface:#FFF; --rail:#F1F3F7; --rail-hover:#E7EAF1;
@@ -24,7 +40,16 @@
     --code-ink:#E2E7F1; --code-dim:#8A93A5;
     --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",system-ui,sans-serif;
     --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace;
+    /* Appearance. One number for the column, so the conversation, the
+       composer and the suggestion list can never disagree about how wide the
+       page is; one for reading size; one for the reading face. */
+    --col:660px;
+    --reading-scale:1;
+    --reading-font:var(--sans);
   }
+  :root[data-width="wide"] { --col:880px; }
+  :root[data-font="serif"] { --reading-font:"New York","Iowan Old Style",Charter,Georgia,serif; }
+  :root[data-font="mono"] { --reading-font:var(--mono); }
   /* Three states, not two. Choosing nothing follows the system, and choosing
      light or dark has to win in *both* directions — a `[data-theme="light"]`
      that only exists outside the media query is beaten by it on a machine set
@@ -49,6 +74,26 @@
       --codebg:#0B0D12; --codebar:#12151C; --codeline:#232833;
       --code-ink:#DCE1EC; --code-dim:#79808F;
   }
+  /* Accent colours. The dark variants carry one more attribute than the dark
+     theme's own block, or at night a chosen accent would lose to — or worse,
+     override with its light values — the theme it has to sit inside. */
+  :root[data-accent="green"] { --accent:#1F7A4D; --accent-ink:#175E3B; --accent-wash:#E6F4EC; }
+  :root[data-accent="violet"] { --accent:#6B3FC0; --accent-ink:#5530A0; --accent-wash:#F0EAFB; }
+  :root[data-accent="amber"] { --accent:#A85A0A; --accent-ink:#874707; --accent-wash:#FCF0E1; }
+  :root[data-accent="rose"] { --accent:#B8325A; --accent-ink:#962848; --accent-wash:#FBE8EE; }
+  :root[data-accent="graphite"] { --accent:#3D4452; --accent-ink:#2A3039; --accent-wash:#ECEEF2; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"])[data-accent="green"] { --accent:#6FCF97; --accent-ink:#9BE0B8; --accent-wash:#15291F; }
+    :root:not([data-theme="light"])[data-accent="violet"] { --accent:#B69CF0; --accent-ink:#CDBBF6; --accent-wash:#231B38; }
+    :root:not([data-theme="light"])[data-accent="amber"] { --accent:#F0B060; --accent-ink:#F5C98D; --accent-wash:#33250F; }
+    :root:not([data-theme="light"])[data-accent="rose"] { --accent:#F08DAA; --accent-ink:#F5B3C7; --accent-wash:#361620; }
+    :root:not([data-theme="light"])[data-accent="graphite"] { --accent:#B4BCC9; --accent-ink:#CDD3DD; --accent-wash:#22262E; }
+  }
+  :root[data-theme="dark"][data-accent="green"] { --accent:#6FCF97; --accent-ink:#9BE0B8; --accent-wash:#15291F; }
+  :root[data-theme="dark"][data-accent="violet"] { --accent:#B69CF0; --accent-ink:#CDBBF6; --accent-wash:#231B38; }
+  :root[data-theme="dark"][data-accent="amber"] { --accent:#F0B060; --accent-ink:#F5C98D; --accent-wash:#33250F; }
+  :root[data-theme="dark"][data-accent="rose"] { --accent:#F08DAA; --accent-ink:#F5B3C7; --accent-wash:#361620; }
+  :root[data-theme="dark"][data-accent="graphite"] { --accent:#B4BCC9; --accent-ink:#CDD3DD; --accent-wash:#22262E; }
   * { box-sizing:border-box; }
   html, body { height:100%; }
   /* An app shell, not a document: the window itself never scrolls, and each
@@ -257,7 +302,7 @@
   .empty h2 { margin:0; font-size:29px; font-weight:500; letter-spacing:-.025em; }
   .empty p { margin:0; color:var(--ink-3); font-size:14px; }
 
-  .thread { max-width:660px; width:100%; margin:0 auto; padding:20px 0 12px;
+  .thread { max-width:var(--col); width:100%; margin:0 auto; padding:20px 0 12px;
             display:flex; flex-direction:column; gap:20px; }
   .u { align-self:flex-end; max-width:78%; background:var(--bubble);
        padding:10px 14px; border-radius:10px; white-space:pre-wrap; }
@@ -698,6 +743,18 @@
                 border:1px solid var(--line); border-radius:8px; padding:8px 11px;
                 color:var(--ink-2); user-select:all; }
 
+  /* Reading size scales the conversation as a whole — prose, code, chips and
+     all — rather than nudging a font-size that half the page sets in pixels
+     and would ignore. The rail and settings keep their size: they are chrome. */
+  .thread, .canvas .empty, .composer { zoom:var(--reading-scale); }
+  .thread, .canvas .empty, .composer textarea { font-family:var(--reading-font); }
+
+  .swatches { display:flex; gap:8px; flex-wrap:wrap; margin-top:4px; }
+  .swatch { width:26px; height:26px; border-radius:50%; border:2px solid transparent; cursor:pointer;
+            box-shadow:0 0 0 1px var(--line); padding:0; }
+  .swatch[aria-pressed="true"] { border-color:var(--surface); box-shadow:0 0 0 2px var(--ink); }
+  .fontsample { margin-top:6px; color:var(--ink-2); font-size:14px; }
+
   /* the ledger — what left, counted */
   .note-b { font:inherit; color:inherit; background:none; border:0; padding:0; cursor:pointer;
             text-decoration:underline; text-underline-offset:2px; text-decoration-thickness:1px; }
@@ -772,7 +829,7 @@
   /* composer */
   /* the skill picker, above the composer */
   .cwrap { padding:8px 24px 20px; flex:none; position:relative; }
-  .picker { position:absolute; left:24px; right:24px; bottom:100%; max-width:660px;
+  .picker { position:absolute; left:24px; right:24px; bottom:100%; max-width:var(--col);
             margin:0 auto 6px; background:var(--surface); border:1px solid var(--line);
             border-radius:12px; box-shadow:0 8px 30px rgba(16,22,38,.14); overflow:hidden;
             max-height:260px; overflow-y:auto; z-index:6; }
@@ -789,7 +846,7 @@
      against .cwrap, which spans the whole pane, so `left` measured from the
      window edge and the menu opened far to the left of the centred composer
      rather than over the button that opens it. */
-  .composer { position:relative; max-width:660px; margin:0 auto; background:var(--surface);
+  .composer { position:relative; max-width:var(--col); margin:0 auto; background:var(--surface);
               border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow-sm);
               padding:10px 12px 8px; display:flex; flex-direction:column; gap:8px; }
   .composer:focus-within { border-color:var(--accent); }
@@ -1525,7 +1582,7 @@ async function boot() {
 
   const settings = await (await fetch('/api/settings')).json();
   state.mode = settings.mode; state.depth = settings.depth; state.model = settings.model;
-  applyTheme(settings.theme);
+  applyLook({ theme: settings.theme, ...(settings.appearance || {}) });
   state.speech = settings.speech || { autoSpeak: false, voice: null, rate: 1 };
   loadVoices();
   setMode(settings.mode, false); setDepth(settings.depth, false);
@@ -1609,6 +1666,34 @@ function applyTheme(theme) {
   else delete root.dataset.theme;
 }
 
+const READING_SCALE = { s: 0.92, m: 1, l: 1.1, xl: 1.22 };
+const ACCENTS = [
+  ['blue', 'Blue', '#2F5BD3'], ['green', 'Green', '#1F7A4D'], ['violet', 'Violet', '#6B3FC0'],
+  ['amber', 'Amber', '#A85A0A'], ['rose', 'Rose', '#B8325A'], ['graphite', 'Graphite', '#3D4452'],
+];
+const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+const MOD = IS_MAC ? '⌘' : 'Ctrl';
+
+/**
+ * The whole look, painted at once, and remembered on this device so the next
+ * launch paints it before the first frame (see the script at the top).
+ */
+function applyLook(look) {
+  state.look = { ...(state.look || {}), ...look };
+  const l = state.look;
+  const root = document.documentElement;
+  applyTheme(l.theme);
+  const attr = (name, value, fallback) => (value && value !== fallback ? (root.dataset[name] = value) : delete root.dataset[name]);
+  attr('accent', l.accent, 'blue');
+  attr('width', l.width, 'comfortable');
+  attr('font', l.font, 'sans');
+  root.style.setProperty('--reading-scale', READING_SCALE[l.textSize] || 1);
+  state.sendKey = l.sendKey === 'mod-enter' ? 'mod-enter' : 'enter';
+  const box = $('input');
+  if (box) box.placeholder = state.sendKey === 'mod-enter' ? `Ask Reflect…  (${MOD}↵ to send)` : 'Ask Reflect…';
+  try { localStorage.setItem('reflect.look', JSON.stringify(l)); } catch { /* private window — fine */ }
+}
+
 async function showSettings() {
   const body = $('setbody');
   if (!$('setbox').open) $('setbox').showModal();
@@ -1630,6 +1715,7 @@ async function showSettings() {
       <div class="sub">${esc(note)}</div>
     </div>`;
 
+  const ap = cfg.appearance || {};
   body.innerHTML = `
     <div class="glabel">Appearance</div>
     <div class="row">
@@ -1638,6 +1724,51 @@ async function showSettings() {
         <select data-set="theme">
           ${SETTINGS_THEMES.map(([v, l]) => `<option value="${v}"${(cfg.theme || 'system') === v ? ' selected' : ''}>${l}</option>`).join('')}
         </select>
+      </div>
+    </div>
+    <div class="row">
+      <h4>Text size</h4>
+      <div class="sub">
+        <select data-set="appearance.textSize">
+          ${[['s', 'Small'], ['m', 'Default'], ['l', 'Large'], ['xl', 'Larger']].map(([v, l]) => `<option value="${v}"${(ap.textSize || 'm') === v ? ' selected' : ''}>${l}</option>`).join('')}
+        </select>
+        <div class="fontsample quiet">The conversation and the box you type in. The rest stays put.</div>
+      </div>
+    </div>
+    <div class="row">
+      <h4>Reading font</h4>
+      <div class="sub">
+        <select data-set="appearance.font">
+          ${[['sans', 'System'], ['serif', 'Serif'], ['mono', 'Monospace']].map(([v, l]) => `<option value="${v}"${(ap.font || 'sans') === v ? ' selected' : ''}>${l}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="row">
+      <h4>Accent colour</h4>
+      <div class="sub">
+        <div class="swatches" role="group" aria-label="Accent colour">
+          ${ACCENTS.map(([v, l, c]) => `<button type="button" class="swatch" data-accent-pick="${v}" title="${l}" aria-label="${l}" aria-pressed="${(ap.accent || 'blue') === v}" style="background:${c}"></button>`).join('')}
+        </div>
+      </div>
+    </div>
+    <div class="row">
+      <h4>Conversation width</h4>
+      <div class="sub">
+        <select data-set="appearance.width">
+          <option value="comfortable"${(ap.width || 'comfortable') === 'comfortable' ? ' selected' : ''}>Comfortable</option>
+          <option value="wide"${ap.width === 'wide' ? ' selected' : ''}>Wide</option>
+        </select>
+        <div class="fontsample quiet">Wide gives code and tables room. On a phone, both fill the screen.</div>
+      </div>
+    </div>
+    <div class="row">
+      <h4>Send with</h4>
+      <div class="sub">
+        <select data-set="appearance.sendKey">
+          <option value="enter"${(ap.sendKey || 'enter') === 'enter' ? ' selected' : ''}>Enter</option>
+          <option value="mod-enter"${ap.sendKey === 'mod-enter' ? ' selected' : ''}>${MOD}+Enter</option>
+        </select>
+        <div class="fontsample quiet">With Enter, Shift+Enter starts a new line. With ${MOD}+Enter, Enter does — easier for long messages.</div>
       </div>
     </div>
 
@@ -2078,6 +2209,13 @@ async function showSettings() {
     });
   }
 
+  body.querySelectorAll('[data-accent-pick]').forEach((b) => b.addEventListener('click', async () => {
+    body.querySelectorAll('[data-accent-pick]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    applyLook({ accent: b.dataset.accentPick });
+    const { theme, ...appearance } = state.look;
+    await save({ appearance });
+  }));
+
   body.querySelectorAll('[data-set]').forEach((el) => {
     el.addEventListener('change', async () => {
       const key = el.dataset.set;
@@ -2085,7 +2223,7 @@ async function showSettings() {
       if (key === 'maxContext' || key === 'keepWarmMinutes') value = Number(value);
       if (key === 'extractModel') value = value || null;
       // Paint first: a theme that waits for a round trip feels broken.
-      if (key === 'theme') applyTheme(value);
+      if (key === 'theme') applyLook({ theme: value });
 
       // These three used to live in the composer, so their setters are what
       // holds the live state the next turn reads. Driven with persist=false —
@@ -2094,6 +2232,14 @@ async function showSettings() {
       if (key === 'mode') setMode(value, false);
       if (key === 'depth') { value = Number(value); setDepth(value, false); }
       if (key === 'thinking') setThinkLevel(value, false);
+
+      // appearance.* likewise, and painted before the round trip.
+      if (key.startsWith('appearance.')) {
+        const field = key.slice('appearance.'.length);
+        applyLook({ [field]: value });
+        const { theme, ...appearance } = state.look;
+        return void (await save({ appearance }));
+      }
 
       // speech.* is one object in the config, so the whole thing is sent with
       // the one field changed — a partial patch would drop the other two.
@@ -4236,7 +4382,11 @@ $('input').addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { e.preventDefault(); return closePicker(); }
   }
 
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+  // Never mid-composition: Enter there picks a Japanese or Chinese candidate,
+  // and sending half a word is the bug every chat box ships once.
+  if (e.key !== 'Enter' || e.isComposing || e.keyCode === 229) return;
+  const mod = e.metaKey || e.ctrlKey;
+  if (state.sendKey === 'mod-enter' ? mod : !e.shiftKey && !mod) { e.preventDefault(); send(); }
 });
 function sizeInput() {
   const box = $('input');

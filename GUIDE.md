@@ -649,11 +649,20 @@ which is documented and yours to edit.
 | | |
 |---|---|
 | **Theme** | Follow the system, or force light or dark |
+| **Text size** | Small to Larger. Scales the conversation and the box you type in; the rail and settings stay put |
+| **Reading font** | System, Serif or Monospace — for the conversation only |
+| **Accent colour** | Six, each tuned separately for light and dark |
+| **Conversation width** | Comfortable, or Wide for code and tables. A phone fills the screen either way |
+| **Send with** | Enter (Shift+Enter for a new line), or ⌘/Ctrl+Enter (Enter for a new line) |
 | **Keep the model in memory for** | See below |
 | **Charts and pages** | Costs about a second before the first word. Off if you only want prose. |
 | **Notice things worth keeping** | Automatic memory. Off means only "remember this" saves anything. |
 | **Model that writes memory** | Leave it on the recommended option. See below. |
 | **Largest window to plan for** | Not a quality dial — the cache for it is resident memory |
+
+**The look is remembered on the device, too.** The server's copy is the real one,
+but the last look chosen is also cached in the page, so a dark-mode launch never
+flashes light first.
 
 **Keep the model in memory for.** A model still loaded answers in under a second;
 one that has to be fetched back takes about twenty. It holds several gigabytes

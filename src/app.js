@@ -127,6 +127,15 @@ export function localOnly(req, res, next) {
  *
  * @returns {Promise<{app: import('express').Express, home: object, config: object}>}
  */
+/** Everything the appearance settings can be. The page draws each of these. */
+export const APPEARANCE = {
+  textSize: ['s', 'm', 'l', 'xl'],
+  font: ['sans', 'serif', 'mono'],
+  accent: ['blue', 'green', 'violet', 'amber', 'rose', 'graphite'],
+  width: ['comfortable', 'wide'],
+  sendKey: ['enter', 'mod-enter'],
+};
+
 export async function createApp() {
   const app = express();
   app.use(localOnly);
@@ -368,9 +377,26 @@ export async function createApp() {
   }));
 
   app.post('/api/settings', wrap(async (req, res) => {
-    const allowed = ['model', 'mode', 'depth', 'thinking', 'maxContext', 'artifacts', 'autoExtract', 'extractModel', 'theme', 'keepWarmMinutes', 'speech', 'sleep'];
+    const allowed = ['model', 'mode', 'depth', 'thinking', 'maxContext', 'artifacts', 'autoExtract', 'extractModel', 'theme', 'keepWarmMinutes', 'speech', 'sleep', 'appearance'];
     const patch = {};
     for (const key of allowed) if (key in (req.body || {})) patch[key] = req.body[key];
+    // Appearance is checked value by value against what the page can draw, so
+    // a hand-edited config or a stray request cannot leave the app in a state
+    // its own settings screen has no option for. Unknown values keep the old.
+    if ('appearance' in patch) {
+      const given = patch.appearance && typeof patch.appearance === 'object' ? patch.appearance : {};
+      const current = (await loadConfig()).appearance || {};
+      const pick = (k, values) => (values.includes(given[k]) ? given[k] : current[k]);
+      patch.appearance = Object.fromEntries(
+        Object.entries({
+          textSize: pick('textSize', APPEARANCE.textSize),
+          font: pick('font', APPEARANCE.font),
+          accent: pick('accent', APPEARANCE.accent),
+          width: pick('width', APPEARANCE.width),
+          sendKey: pick('sendKey', APPEARANCE.sendKey),
+        }).filter(([, v]) => v !== undefined)
+      );
+    }
     if ('thinking' in patch) patch.thinking = normalizeLevel(patch.thinking);
     // A window is RAM. Clamp rather than trust, so a typo cannot wedge the app
     // into reloading a model with a window the machine will not survive.
