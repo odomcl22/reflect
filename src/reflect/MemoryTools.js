@@ -36,7 +36,7 @@ import * as Skills from '../skills/Skills.js';
  * cannot be talked into calling it, which is a cheaper defence than checking
  * afterwards — though the check happens afterwards too.
  */
-export function toolsFor({ justWrote = false, grants = [], disabled = [], web = false, contacts = 0 } = {}) {
+export function toolsFor({ justWrote = false, grants = [], disabled = [], web = false, contacts = 0, skills = 0 } = {}) {
   const memory = justWrote ? TOOL_SCHEMAS.filter((t) => t.function.name !== 'memory_write') : TOOL_SCHEMAS;
   const folder = !grants.length
     ? []
@@ -64,7 +64,8 @@ export function toolsFor({ justWrote = false, grants = [], disabled = [], web = 
       : DELIVER_SCHEMAS.filter((t) => t.function.name !== 'message');
 
   const off = new Set(disabled);
-  return [...memory, ...folder, ...outward, ...TASK_SCHEMAS, ...reach, ...SKILL_SCHEMAS].filter((t) => !off.has(t.function.name));
+  const learn = skills > 0 ? [SKILL_USE_SCHEMA, ...SKILL_SCHEMAS] : SKILL_SCHEMAS;
+  return [...memory, ...folder, ...outward, ...TASK_SCHEMAS, ...reach, ...learn].filter((t) => !off.has(t.function.name));
 }
 
 /** Everything that could be offered, for a screen that lets you choose. */
@@ -76,7 +77,7 @@ export function allTools() {
     : name.startsWith('skill_') ? 'Skills'
     : ['notify', 'message', 'mail_draft'].includes(name) ? 'Reaching you'
     : 'Connected folders';
-  return [...TOOL_SCHEMAS, ...FOLDER_SCHEMAS, ...WEB_SCHEMAS, ...TASK_SCHEMAS, ...DELIVER_SCHEMAS, ...SKILL_SCHEMAS].map((t) => ({
+  return [...TOOL_SCHEMAS, ...FOLDER_SCHEMAS, ...WEB_SCHEMAS, ...TASK_SCHEMAS, ...DELIVER_SCHEMAS, SKILL_USE_SCHEMA, ...SKILL_SCHEMAS].map((t) => ({
     name: t.function.name,
     description: t.function.description,
     group: group(t.function.name),
@@ -106,6 +107,26 @@ export function allTools() {
  * silently replacing it would be the same failure as a supersession that
  * deletes the thing it was meant to replace.
  */
+/** Loading a skill, as opposed to writing one. Offered only when there is one to load. */
+export const SKILL_USE_SCHEMA = {
+  type: 'function',
+  function: {
+    name: 'skill_use',
+    description:
+      'Load the full instructions for one of the skills listed under Skills. The list has one line ' +
+      'each — call this before following a skill. If what it returns names a reference file, load ' +
+      'that too by passing file.',
+    parameters: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'The skill name exactly as listed.' },
+        file: { type: 'string', description: 'Optional: a reference file the skill mentions, like references/forms.md.' },
+      },
+      required: ['name'],
+    },
+  },
+};
+
 export const SKILL_SCHEMAS = [
   {
     type: 'function',
@@ -474,6 +495,38 @@ export async function runTool(name, args = {}, context = {}) {
             written: true,
           },
         };
+      }
+
+      case 'skill_use': {
+        const name = String(args.name || '').trim().replace(/^[/@]/, '');
+        const skill = await Skills.readSkill(name).catch(() => null);
+        if (!skill || !skill.valid) return { result: `There is no skill called "${name}".` };
+        // Off means off, including when the model asks. Otherwise the switch
+        // is a suggestion — and a skill that arrived from a plugin, or that
+        // Reflect wrote itself, is off precisely until somebody has read it.
+        if (skill.enabled === false) {
+          return { result: `"${name}" is switched off. Only the user can turn it on, in Skills.` };
+        }
+
+        const LIMIT = 16_000;
+        const cap = (t) => (t.length > LIMIT ? `${t.slice(0, LIMIT)}\n\n[cut at ${LIMIT} characters]` : t);
+
+        if (args.file) {
+          const doc = await Skills.readSkillFile(name, args.file);
+          return doc === null
+            ? { result: `"${name}" has no readable file called "${args.file}".` }
+            : { result: cap(doc), skill: name };
+        }
+
+        const { docs, scripts } = await Skills.skillResources(name);
+        let out = `Skill: ${name}\n\n${skill.body}`;
+        if (docs.length) out += `\n\nReference files you can load with skill_use and file: ${docs.join(', ')}`;
+        if (scripts.length) {
+          out +=
+            `\n\nThis skill ships scripts (${scripts.join(', ')}). Reflect does not run code. Follow the ` +
+            `instructions as far as they go without them, and tell the user plainly which part needed a script.`;
+        }
+        return { result: cap(out), skill: name };
       }
 
       case 'skill_create': {

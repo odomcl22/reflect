@@ -116,6 +116,63 @@ export async function readSkill(name) {
   return { ...parseSkill(await readText(key, ''), name), folder: name, key };
 }
 
+/**
+ * The other files a skill carries.
+ *
+ * Tested against the skills on a real machine: 14 of 24 ship reference
+ * documents that SKILL.md tells the reader to open ("see references/forms.md"),
+ * and 5 ship scripts. Reflect only ever read SKILL.md, so more than half of the
+ * ecosystem's skills were pointing at pages the model could not turn to.
+ *
+ * Documents are readable. Scripts are listed so the model can say honestly
+ * which part of a skill needs something Reflect will not do — run code.
+ */
+const DOC = /\.(md|txt)$/i;
+const SCRIPT = /\.(py|sh|bash|js|mjs|cjs|ts|rb|pl|ps1|bat)$/i;
+
+export async function skillResources(name) {
+  const none = { docs: [], scripts: [] };
+  if (!NAME.test(String(name || ''))) return none;
+  const base = join(paths().skills, name);
+  const docs = [];
+  const scripts = [];
+  const sort = (rel) => {
+    if (DOC.test(rel)) docs.push(rel);
+    else if (SCRIPT.test(rel)) scripts.push(rel);
+  };
+  for (const entry of await listFiles(base).catch(() => [])) {
+    if (entry === SKILL_FILE) continue;
+    // One level down is where real skills keep things (references/, scripts/).
+    let inner = null;
+    try {
+      inner = await listFiles(join(base, entry));
+    } catch {
+      inner = null; // a file, not a folder
+    }
+    if (inner && inner.length) inner.forEach((f) => sort(`${entry}/${f}`));
+    else sort(entry);
+  }
+  return { docs, scripts };
+}
+
+/**
+ * One of those documents — and only from inside the skill's own folder.
+ *
+ * The storage port already keeps reads inside Reflect's home, but "inside the
+ * home" includes USER.md and every conversation. A skill asking for
+ * `../../USER.md` is a skill asking for something that is not its own, so
+ * paths are held to plain names under the skill, and to text.
+ */
+export async function readSkillFile(name, file) {
+  if (!NAME.test(String(name || ''))) return null;
+  const rel = String(file || '').replace(/^\.\//, '');
+  const parts = rel.split('/');
+  if (!DOC.test(rel) || parts.some((p) => !p || p === '.' || p === '..' || !/^[A-Za-z0-9_.-]+$/.test(p))) return null;
+  const key = join(paths().skills, name, ...parts);
+  if (!(await exists(key))) return null;
+  return readText(key, '');
+}
+
 export async function writeSkill(name, markdown) {
   if (!NAME.test(name)) throw new Error(`Unsafe skill name: ${name}`);
   await writeText(skillKey(name), markdown);
@@ -168,7 +225,7 @@ export function catalogue(skills, { budget = CATALOGUE_BUDGET } = {}) {
   if (!usable.length) return '';
 
   const lines = [];
-  let used = estimateTokens('## Skills\n\nUse one when it fits by saying so; ask for it by name with /name.\n');
+  let used = estimateTokens('## Skills\n\nOne line each. When one fits, load it with skill_use before following it.\n');
   let dropped = 0;
 
   for (const skill of usable) {
@@ -186,7 +243,11 @@ export function catalogue(skills, { budget = CATALOGUE_BUDGET } = {}) {
   return [
     '## Skills',
     '',
-    'These are instructions you can follow when one fits. Say which you are using.',
+    // This line used to say "these are instructions you can follow" over a list
+    // of one-line descriptions — the model was told to follow instructions it
+    // had never been shown. It worked for the starters only because their
+    // descriptions were nearly the whole skill.
+    'One line each. When one fits, load it with skill_use before following it, and say which you are using.',
     '',
     ...lines,
     dropped ? `\n(${dropped} more not listed; the user can name one with /name.)` : '',

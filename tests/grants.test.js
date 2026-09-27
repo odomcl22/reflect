@@ -225,7 +225,7 @@ test('a tool switched off is not offered at all', async () => {
   assert.deepEqual(
     all.map((t) => t.name).sort(),
     ['file_read', 'file_write', 'folder_create', 'folder_list', 'mail_draft', 'memory_get',
-     'memory_search', 'memory_write', 'message', 'notify', 'skill_create', 'task_create',
+     'memory_search', 'memory_write', 'message', 'notify', 'skill_create', 'skill_use', 'task_create',
      'web_fetch', 'web_search']
   );
   // allTools() is the chooser screen, which lists everything that exists rather

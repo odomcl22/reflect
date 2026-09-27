@@ -371,29 +371,68 @@ export async function findProjectByName(name) {
 const projectPath = (slug) => join(paths().projects, `${slug}.md`);
 
 /** Minimal frontmatter parser: `key: value` and `key: [a, b]`. No YAML dep. */
+/**
+ * YAML frontmatter, as far as Reflect's own files and the Agent Skills format
+ * actually use it.
+ *
+ * Not a YAML parser, and deliberately so — but it has to read what the
+ * ecosystem writes, and it did not. Tested against every SKILL.md on a real
+ * machine: 22 of 24 parsed, and one failure was valid YAML this rejected, a
+ * description written as a multi-line quoted string. The skill loaded as
+ * having no description, which is the one field that decides whether a skill
+ * is ever used.
+ *
+ * Two rules fix that and a worse, quieter problem. Only a line at column zero
+ * starts a key; indented lines continue the key above. The old version trimmed
+ * first and matched after, so a nested block — `metadata:` with `name:` under
+ * it — silently overwrote the top-level `name`. And a value can be a folded
+ * (`>`) or literal (`|`) block, a `- item` list, or a plain scalar that runs on
+ * across lines. Windows line endings are accepted, because skills get written
+ * on Windows too.
+ *
+ * Everything Reflect writes itself — single-line `key: value` and `[a, b]` —
+ * parses exactly as before.
+ */
 export function parseFrontmatter(markdown) {
-  const m = /^---\n([\s\S]*?)\n---\n?/.exec(String(markdown || ''));
-  if (!m) return { data: {}, body: String(markdown || '') };
+  const text = String(markdown || '');
+  const m = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(text);
+  if (!m) return { data: {}, body: text };
 
-  const data = {};
-  for (const line of m[1].split('\n')) {
+  const entries = [];
+  for (const raw of m[1].split(/\r?\n/)) {
     // Hyphens allowed: the Agent Skills format uses `allowed-tools`, and a
     // parser that silently drops a key is worse than one that rejects it.
-    const kv = /^([A-Za-z_][A-Za-z0-9_-]*):\s*(.*)$/.exec(line.trim());
-    if (!kv) continue;
-    const [, key, rawValue] = kv;
-    const value = rawValue.trim();
-    if (/^\[.*\]$/.test(value)) {
-      data[key] = value
+    const top = /^([A-Za-z_][A-Za-z0-9_-]*):(?:\s+(.*))?\s*$/.exec(raw);
+    if (top) {
+      entries.push({ key: top[1], first: (top[2] ?? '').trim(), rest: [] });
+    } else if (entries.length && (/^\s/.test(raw) || !raw.trim())) {
+      entries[entries.length - 1].rest.push(raw.trim());
+    }
+    // Anything else at column zero — a comment, stray text — is not a key.
+  }
+
+  const unquote = (v) => v.replace(/^["']|["']$/g, '');
+  const fold = (lines) =>
+    lines.reduce((acc, l) => (l === '' ? `${acc}\n` : `${acc}${acc && !acc.endsWith('\n') ? ' ' : ''}${l}`), '').trim();
+
+  const data = {};
+  for (const { key, first, rest } of entries) {
+    const more = rest.filter(Boolean);
+    if (/^[|>][+-]?$/.test(first)) {
+      data[key] = first[0] === '|' ? rest.join('\n').replace(/\n+$/, '') : fold(rest);
+    } else if (!first && more.length && more.every((l) => /^-(\s|$)/.test(l))) {
+      data[key] = more.map((l) => unquote(l.replace(/^-\s*/, '').trim())).filter(Boolean);
+    } else if (/^\[.*\]$/.test(first) && !more.length) {
+      data[key] = first
         .slice(1, -1)
         .split(',')
-        .map((s) => s.trim().replace(/^["']|["']$/g, ''))
+        .map((s) => unquote(s.trim()))
         .filter(Boolean);
     } else {
-      data[key] = value.replace(/^["']|["']$/g, '');
+      data[key] = unquote([first, ...more].filter(Boolean).join(' ').trim());
     }
   }
-  return { data, body: String(markdown).slice(m[0].length) };
+  return { data, body: text.slice(m[0].length) };
 }
 
 export function serializeFrontmatter(data) {

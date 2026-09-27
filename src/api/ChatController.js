@@ -307,6 +307,7 @@ export function createChatHandler({ runtime }) {
           disabled: [...(config.disabledTools || []), ...withheld],
           web: Boolean(config.web?.enabled),
           contacts: reachable.length,
+          skills: skills.filter((x) => x.valid && x.enabled !== false).length,
         })
       );
       let answer = '';
@@ -363,7 +364,7 @@ export function createChatHandler({ runtime }) {
           const args = parseArgs(call.function?.arguments);
           send({ type: 'tool_call', name, args });
 
-          const { result, write, web, sent } = await runTool(name, args, {
+          const { result, write, web, sent, skill } = await runTool(name, args, {
             web: config.web,
             signal: controller.signal,
           });
@@ -387,6 +388,9 @@ export function createChatHandler({ runtime }) {
           // are different events, and the transcript should not need the
           // model's summary to tell them apart.
           if (sent) send({ type: 'sent', sent });
+          // The same chip "/name" already draws, so a skill the model reached
+          // for is as visible as one somebody asked for.
+          if (skill) send({ type: 'skills', used: [skill] });
           convo.push({ role: 'tool', tool_name: name, content: result });
         }
       }

@@ -84,3 +84,90 @@ test('it is offered, and it appears on the screen that lists everything', () => 
   assert.ok(entry, 'missing from the tool chooser');
   assert.equal(entry.group, 'Skills');
 });
+
+// ────────────────────────────────────────────── skills from somewhere else
+
+const { parseFrontmatter } = await import('../src/store/MemoryFiles.js');
+
+/**
+ * Found by running every SKILL.md on a real machine through the parser: 22 of
+ * 24 loaded, and one failure was valid YAML — a multi-line quoted description.
+ * The skill loaded with no description, the field that decides whether it is
+ * ever used.
+ */
+test('a description written across several lines is read, not lost', () => {
+  const { data } = parseFrontmatter('---\nname: m\ndescription:\n  "line one\n  line two"\n---\nbody');
+  assert.equal(data.description, 'line one line two');
+});
+
+test('folded, literal, and dash-list values all read', () => {
+  assert.equal(parseFrontmatter('---\nd: >\n  a\n  b\n---\n').data.d, 'a b');
+  assert.equal(parseFrontmatter('---\nd: |\n  a\n  b\n---\n').data.d, 'a\nb');
+  assert.deepEqual(parseFrontmatter('---\nt:\n  - Read\n  - Grep\n---\n').data.t, ['Read', 'Grep']);
+});
+
+// The quieter bug the old parser had: it trimmed before matching, so a nested
+// key under `metadata:` silently replaced the top-level one of the same name.
+test('a nested key cannot overwrite a top-level one', () => {
+  const { data } = parseFrontmatter('---\nname: real\nmetadata:\n  name: impostor\n---\n');
+  assert.equal(data.name, 'real');
+});
+
+test('what Reflect writes itself still reads exactly as before', () => {
+  const { data } = parseFrontmatter('---\nname: a\nwhen: every day at 08:00\ntags: [x, y]\n---\nbody');
+  assert.deepEqual(data, { name: 'a', when: 'every day at 08:00', tags: ['x', 'y'] });
+});
+
+test('skills written on Windows read too', () => {
+  assert.equal(parseFrontmatter('---\r\nname: w\r\ndescription: d\r\n---\r\nb').data.description, 'd');
+});
+
+// ────────────────────────────────────────────── the model loading a skill
+
+async function plantSkill(name, { enabled = true, extra = {} } = {}) {
+  await Skills.writeSkill(
+    name,
+    `---\nname: ${name}\ndescription: Test skill. Use when testing.\nenabled: ${enabled}\n---\n\nFollow these steps. See references/guide.md.\n`
+  );
+  const base = path.join(tmpHome, 'skills', name);
+  for (const [rel, text] of Object.entries(extra)) {
+    await fsp.mkdir(path.dirname(path.join(base, rel)), { recursive: true });
+    await fsp.writeFile(path.join(base, rel), text);
+  }
+}
+
+const load = (args) => runTool('skill_use', args, {});
+
+test('the model can load a skill it has only seen one line of', async () => {
+  await plantSkill('guided', { extra: { 'references/guide.md': 'The detailed guide.', 'scripts/run.py': 'print(1)' } });
+  const out = await load({ name: 'guided' });
+  assert.match(out.result, /Follow these steps/);
+  assert.match(out.result, /references\/guide\.md/, 'the reference file must be named so it can be loaded');
+  assert.match(out.result, /does not run code/, 'scripts must be admitted to, not silently ignored');
+  assert.equal(out.skill, 'guided');
+});
+
+test('and the reference document it points to', async () => {
+  const out = await load({ name: 'guided', file: 'references/guide.md' });
+  assert.equal(out.result, 'The detailed guide.');
+});
+
+// Inside Reflect's home is not the same as inside the skill. USER.md is in the
+// home; it is not the skill's to hand out.
+test('a skill file path cannot leave the skill', async () => {
+  for (const escape of ['../../USER.md', '/etc/hosts', 'references/../../../USER.md', 'scripts/run.py']) {
+    const out = await load({ name: 'guided', file: escape });
+    assert.match(out.result, /no readable file/, `read ${escape}`);
+  }
+});
+
+test('a switched-off skill cannot be loaded by the model either', async () => {
+  await plantSkill('dormant', { enabled: false });
+  const out = await load({ name: 'dormant' });
+  assert.match(out.result, /switched off/);
+});
+
+test('skill_use is offered only when there is something to load', () => {
+  assert.ok(!toolsFor({}).map((t) => t.function.name).includes('skill_use'));
+  assert.ok(toolsFor({ skills: 1 }).map((t) => t.function.name).includes('skill_use'));
+});
