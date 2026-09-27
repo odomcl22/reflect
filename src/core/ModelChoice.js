@@ -85,6 +85,42 @@ const biggest = (models) => models.reduce((a, b) => ((b.sizeBytes || 0) > (a.siz
  * empty JSON. That is the worst failure available here: memory quietly stops
  * working, every request succeeds, and nothing anywhere reports an error.
  */
+/**
+ * Below this, Reflect works but does not feel like it does.
+ *
+ * Measured across this session rather than guessed. A 4B model asked plainly,
+ * in English, to save a skill did not reach for the tool; a 9B did it first
+ * try. Project notes were filed to the wrong place. Extraction on small models
+ * scored 0 out of 8 on the same corpus a larger one handled.
+ *
+ * The harness is the same in every case — what changes is whether the model
+ * can hold a dozen tool definitions and still follow a sentence. Saying "any
+ * chat model will do" invites someone to try a 1B, conclude Reflect is bad,
+ * and be right about their experience.
+ *
+ * It is a warning, never a block. Somebody on a small laptop should still get
+ * a working assistant, and told plainly what they are trading away.
+ */
+export const COMFORTABLE_PARAMS_B = 7;
+
+/** @returns {null | {level: 'small'|'tiny', params: number, says: string}} */
+export function sizeWarning(model) {
+  const p = paramsB(model);
+  if (p === null || p >= COMFORTABLE_PARAMS_B) return null;
+  if (p < 4) {
+    return {
+      level: 'tiny',
+      params: p,
+      says: `${model.name} is ${model.parameterSize || `${p}B`}. It will chat, but it will miss most of what is worth remembering and will rarely use tools. 7B or larger is where Reflect starts working properly.`,
+    };
+  }
+  return {
+    level: 'small',
+    params: p,
+    says: `${model.name} is ${model.parameterSize || `${p}B`}. Expect it to forget things worth keeping and to skip tools it should reach for. 7B or larger is noticeably better.`,
+  };
+}
+
 export const EXTRACT_MIN_PARAMS_B = 3;
 
 /**
@@ -100,7 +136,7 @@ export const EXTRACT_MIN_BYTES = 2e9;
 /** Weights that cannot hold a conversation, whatever their size. */
 const NOT_A_CHAT_MODEL = /embed|rerank|whisper|flux|stable-?diffusion|z-image|sdxl|clip\b/i;
 
-const paramsB = (m) => {
+export const paramsB = (m) => {
   const match = /([\d.]+)\s*B/i.exec(m.parameterSize || '');
   return match ? Number(match[1]) : null;
 };

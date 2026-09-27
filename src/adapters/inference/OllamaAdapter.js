@@ -109,7 +109,12 @@ export class OllamaAdapter {
 
   /** Chat-capable local models, largest context first. Cloud + non-text hidden. */
   async listModels() {
-    const res = await count(url(this.baseUrl, '/api/tags'), { signal: AbortSignal.timeout(5000) });
+    // 5s was too tight and failed in a way that looked like a bug rather than a
+    // timeout: the model picker simply went empty. Listing takes 0.3s idle and
+    // over 2s on a machine with two dozen models — and Ollama serialises these,
+    // so a page load and a settings panel opening together queue, and the
+    // second one used to lose.
+    const res = await count(url(this.baseUrl, '/api/tags'), { signal: AbortSignal.timeout(20_000) });
     if (!res.ok) throw new Error(`Ollama /api/tags returned ${res.status}`);
     const { models = [] } = await res.json();
 

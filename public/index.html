@@ -665,6 +665,10 @@
   .reach { color:var(--ink-3); white-space:nowrap; }
   .reach.send { color:var(--ink); }
 
+  .modelwarn { max-width:640px; margin:0 auto 6px; font-size:12px; line-height:1.5;
+               color:var(--ink-3); text-align:center; }
+  .modelwarn.tiny { color:#8A5A00; }
+
   .starts { display:flex; flex-direction:column; gap:7px; margin:16px auto 0; max-width:440px; }
   .start { font:inherit; font-size:13.5px; text-align:left; padding:9px 13px; cursor:pointer;
            border:1px solid var(--line); border-radius:9px; background:var(--surface); color:var(--ink-2); }
@@ -2067,8 +2071,21 @@ async function editAssistant(existing, models) {
 }
 
 async function loadModels() {
-  const { models, current } = await (await fetch('/api/models')).json();
+  const payload = await (await fetch('/api/models')).json();
+  const { models, current, warning } = payload;
   state.model = current;
+  // Once, quietly, under the composer — not a banner, and never a block. A
+  // small model still works; somebody on a small laptop should get a working
+  // assistant and be told plainly what they are trading away.
+  //
+  // Only updated when the listing actually worked. loadModels runs again on
+  // several later events, and a call that failed carries no verdict — taking
+  // its silence as "no warning" made the line appear on load and vanish a
+  // moment later, which is worse than never showing it.
+  if (!payload.error) {
+    state.modelWarning = warning || null;
+    paintModelWarning();
+  }
   $('model').innerHTML = models.map((m) =>
     `<option value="${m.name}"${m.name === current ? ' selected' : ''}>${m.name}${m.cloud ? ' (cloud)' : ''}</option>`
   // value="" matters: without it the select reports its own label, "no models"
@@ -2925,6 +2942,26 @@ async function showMirror() {
   // The one-at-a-time notice appears under the page, with its Dismiss intact —
   // the page's own copy, which is null when a section already says it.
   showNotice(page.notice);
+}
+
+/**
+ * Say when the chosen model is below what this needs.
+ *
+ * Measured, not guessed: a 4B asked plainly to save a skill did not reach for
+ * the tool and a 9B did it first try. The harness is identical in both cases,
+ * so a person blaming Reflect for that is drawing the only conclusion their
+ * experience supports. Better to say it where the model is chosen.
+ */
+function paintModelWarning() {
+  document.querySelector('.modelwarn')?.remove();
+  const w = state.modelWarning;
+  if (!w) return;
+  const note = $('note');
+  if (!note) return;
+  const el = document.createElement('div');
+  el.className = `modelwarn ${w.level}`;
+  el.textContent = w.says;
+  note.parentElement.insertBefore(el, note);
 }
 
 /**

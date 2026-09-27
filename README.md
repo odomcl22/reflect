@@ -63,8 +63,14 @@ the easiest:
 
 ```bash
 brew install ollama && ollama serve      # or https://ollama.com
-ollama pull qwen3:4b                     # any chat model will do
+ollama pull qwen3.5:9b                   # 7B or larger — see below
 ```
+
+**Size matters more than you would like.** Reflect works at any size, but below
+about 7B a model starts missing things worth remembering and skipping tools it
+should reach for — measured, not guessed. Reflect says so under the composer
+when the model you picked is small, rather than letting you conclude the app is
+bad. On 8GB of RAM, a 7B quantised model is the sweet spot.
 
 Then:
 

@@ -16,7 +16,7 @@ import { scaffold, loadConfig, saveConfig, readText, writeText } from './store/F
 import * as Conversations from './store/ConversationStore.js';
 import { useInference, inference } from './core/Inference.js';
 import { adapterFor, detect } from './runtimes/Providers.js';
-import { pickDefaultModel, canExtract } from './core/ModelChoice.js';
+import { pickDefaultModel, canExtract, sizeWarning } from './core/ModelChoice.js';
 import { PROVIDERS as SearchProviders, search as runSearch } from './web/Search.js';
 import { continueElsewhere, branchFrom } from './context/Continue.js';
 import { notice, dismiss as dismissNotice } from './reflect/Notice.js';
@@ -189,17 +189,36 @@ export async function createApp() {
 
   // ---- models -------------------------------------------------------------
 
+  // The model list changes when somebody pulls one, which is rare, and it is
+  // asked for on every page load and every time settings opens — which is
+  // often. Without this they queue inside Ollama and the loser comes back
+  // empty, which reads as "Reflect lost my models" rather than "that took a
+  // moment". Short enough that a model you just pulled shows up.
+  let modelCache = null;
+  const MODEL_TTL = 8000;
+  app.set('forgetModels', () => { modelCache = null; });
+
   app.get('/api/models', wrap(async (_req, res) => {
+    if (modelCache && Date.now() - modelCache.at < MODEL_TTL) {
+      return res.json({ ...modelCache.body, current: (await loadConfig()).model, cached: true });
+    }
     const current = (await loadConfig()).model;
     try {
-      res.json({
-        models: await runtime.listModels(),
-        current,
+      const models = await runtime.listModels();
+      // Said where the choice is made, not buried in a readme nobody opens
+      // after the app is already running.
+      const chosen = models.find((m) => m.name === current);
+      const body = {
+        models,
+        warning: chosen ? sizeWarning(chosen) : null,
         // So the picker can decide whether to draw a pull button, rather than
         // drawing one and finding out.
         capabilities: runtime.capabilities?.() || null,
-      });
+      };
+      modelCache = { at: Date.now(), body };
+      res.json({ ...body, current });
     } catch (err) {
+      // Never cache a failure: the next try should be a real one.
       res.json({ models: [], current, error: err.message });
     }
   }));
@@ -211,6 +230,7 @@ export async function createApp() {
    * thing worse than a slow download is one with no evidence it is happening.
    */
   app.post('/api/models/pull', wrap(async (req, res) => {
+    app.get('forgetModels')?.();
     const model = String(req.body?.model || '').trim();
     if (!model) return res.status(400).json({ error: 'Which model?' });
     if (!runtime.pull) {
@@ -287,6 +307,7 @@ export async function createApp() {
 
   /** Choose one. Verified before it is saved, so a typo cannot strand the app. */
   app.put('/api/runtime', wrap(async (req, res) => {
+    app.get('forgetModels')?.();
     const { provider, baseUrl = null, apiKey = null } = req.body || {};
     let candidate;
     try {
