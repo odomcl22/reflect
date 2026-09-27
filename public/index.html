@@ -665,6 +665,11 @@
   .reach { color:var(--ink-3); white-space:nowrap; }
   .reach.send { color:var(--ink); }
 
+  .plugresult { margin-top:8px; font-size:12.5px; color:var(--ink-2); display:flex; flex-direction:column; gap:3px; }
+  .plugresult .skip { color:var(--ink-3); }
+  .plugresult .bad { color:#B03A2E; }
+  .row h4 input[type=checkbox] { margin-right:6px; vertical-align:-1px; }
+
   .sclist { max-height:220px; overflow:auto; margin-top:8px; border:1px solid var(--line);
             border-radius:8px; padding:6px 10px; display:flex; flex-direction:column; gap:2px; }
   .scitem { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--ink-2); cursor:pointer; padding:2px 0; }
@@ -4485,23 +4490,99 @@ async function showSkills() {
     ? `${skills.length} installed · ${catalogueTokens} tokens of prompt on every turn. Ask for one by name with /skill.`
     : 'None yet. A skill is instructions you can reuse — a voice, a format, a procedure.';
 
+  const { plugins } = await fetch('/api/plugins').then((r) => r.json()).catch(() => ({ plugins: [] }));
+
+  // The on/off switch. The change handler below was always wired to a checkbox
+  // — the markup just never drew one, so a skill that arrived switched off
+  // (from a plugin, or written by Reflect itself) had no way to be turned on.
+  // "Off until you have read it" is only a safety property if "on" exists.
   body.innerHTML =
     skills
       .map(
         (s) => `<div class="row" data-skill="${esc(s.name)}">
-        <h4>${esc(s.name)} ${
-          s.valid ? '<span class="tag ok">ready</span>' : '<span class="tag bad">not usable</span>'
-        }</h4>
-        <div class="sub">${esc(s.valid ? s.description : s.problems.join(' · '))}</div>
+        <h4>
+          ${s.valid ? `<input type="checkbox" aria-label="Use ${esc(s.name)}"${s.enabled !== false ? ' checked' : ''} />` : ''}
+          ${esc(s.name)} ${
+          !s.valid ? '<span class="tag bad">not usable</span>'
+          : s.enabled === false ? '<span class="tag">off</span>'
+          : '<span class="tag ok">on</span>'
+        }${s.source ? ` <span class="tag">from ${esc(s.source)}</span>` : ''}</h4>
+        <div class="sub">${esc(s.valid ? s.description : s.problems.join(' · '))}${
+          s.valid && s.enabled === false ? ' <b>Read it before turning it on.</b>' : ''}</div>
         <div class="acts2">
-          <button data-do="edit">Edit</button>
+          <button data-do="edit">${s.enabled === false ? 'Read' : 'Edit'}</button>
           <button data-do="delete" class="danger">Delete</button>
         </div>
       </div>`
       )
       .join('') || '<p class="quiet">Nothing installed. Press New to write one.</p>';
 
-  body.querySelectorAll('.row').forEach((row) => {
+  // Importing, and what has been imported.
+  body.insertAdjacentHTML('beforeend', `
+    <div class="glabel" style="margin-top:18px">Plugins and skills from elsewhere</div>
+    <div class="row">
+      <h4>Import a folder</h4>
+      <div class="sub">
+        A plugin folder, or a single skill folder with a SKILL.md in it. Skills arrive switched off —
+        they are instructions written by someone else, so read them first. Scripts and hooks never run.
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+          <input id="plugpath" placeholder="/path/to/plugin-or-skill" style="flex:1 1 260px;font-family:var(--mono);font-size:12.5px" />
+          <button type="button" id="plugimport">Import</button>
+        </div>
+        <div id="plugresult" class="plugresult"></div>
+      </div>
+    </div>
+    ${plugins
+      .map(
+        (p) => `<div class="row" data-plugin="${esc(p.name)}">
+        <h4>${esc(p.name)} ${p.version ? `<span class="tag">${esc(p.version)}</span>` : ''}</h4>
+        <div class="sub">${esc(p.description || '')}
+          <div>${p.skills.length} skill${p.skills.length === 1 ? '' : 's'}${
+            p.connectors.length ? ` · ${p.connectors.length} connector${p.connectors.length === 1 ? '' : 's'} waiting for connector support` : ''}${
+            p.skipped.length ? ` · ${p.skipped.length} not imported` : ''}</div>
+        </div>
+        <div class="acts2"><button data-do="unplug" class="danger">Remove</button></div>
+      </div>`
+      )
+      .join('')}`);
+
+  const showResult = (r) => {
+    const out = $('plugresult');
+    if (!r.ok) return void (out.innerHTML = `<div class="bad">${esc(r.reason || 'That did not import.')}</div>`);
+    out.innerHTML =
+      `<div>Imported ${r.imported.length} skill${r.imported.length === 1 ? '' : 's'}${r.imported.length ? ', all switched off' : ''}.</div>` +
+      (r.connectors.length ? `<div>${r.connectors.length} connector${r.connectors.length === 1 ? '' : 's'} recorded: ${esc(r.connectors.map((c) => c.name).join(', '))}. Waiting for connector support.</div>` : '') +
+      r.skipped.map((k) => `<div class="skip">Not imported — ${esc(k.what)} <b>${esc(k.name)}</b>: ${esc(k.why)}</div>`).join('');
+  };
+
+  $('plugimport').addEventListener('click', async () => {
+    const pathGiven = $('plugpath').value.trim();
+    if (!pathGiven) return;
+    $('plugimport').disabled = true;
+    const r = await (await fetch('/api/plugins/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: pathGiven }),
+    })).json().catch(() => ({ ok: false, reason: 'The import did not finish.' }));
+    $('plugimport').disabled = false;
+    if (r.ok) {
+      await refreshSkillList();
+      await showSkills();
+    }
+    showResult(r);
+  });
+
+  body.querySelectorAll('[data-plugin]').forEach((row) =>
+    row.querySelector('[data-do="unplug"]').addEventListener('click', async () => {
+      const name = row.dataset.plugin;
+      if (!(await askConfirm(`Remove ${name}?`, 'The skills it brought go with it — except any you have edited and made your own.', 'Remove'))) return;
+      await fetch(`/api/plugins/${encodeURIComponent(name)}`, { method: 'DELETE' });
+      await refreshSkillList();
+      showSkills();
+    })
+  );
+
+  body.querySelectorAll('.row[data-skill]').forEach((row) => {
     const name = row.dataset.skill;
     row.querySelector('input[type=checkbox]')?.addEventListener('change', async (e) => {
       // The state lives in the skill's own frontmatter, so this edits the file

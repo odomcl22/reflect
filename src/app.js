@@ -26,6 +26,7 @@ import { summary as ledgerSummary, entries as ledgerEntries } from './reflect/Le
 import * as Deliver from './deliver/Deliver.js';
 import * as Kokoro from './speech/Kokoro.js';
 import * as Shortcuts from './desktop/Shortcuts.js';
+import * as Plugins from './skills/Plugins.js';
 import { shouldSleep, sleep as sleepPass } from './reflect/Sleep.js';
 import { sources as receiptSources } from './reflect/Receipts.js';
 import { versions as listVersions, readVersion, restore as restoreVersion, snapshot as takeVersion } from './reflect/Versions.js';
@@ -701,6 +702,24 @@ export async function createApp() {
   // Instructions you can teach it, in the open Agent Skills format: a folder
   // with a SKILL.md. Invalid ones are listed with their problems rather than
   // hidden, because a skill that silently does nothing is the worst outcome.
+
+  // ---- plugins ------------------------------------------------------------
+  // Unpacked into skills (switched off), connectors (recorded, waiting), and a
+  // plain list of what did not fit and why. There is no plugin runtime; there
+  // are the pieces Reflect already understands.
+  app.get('/api/plugins', wrap(async (_req, res) => {
+    res.json({ plugins: await Plugins.list() });
+  }));
+
+  app.post('/api/plugins/import', wrap(async (req, res) => {
+    const done = await Plugins.importFolder(String(req.body?.path || ''));
+    res.status(done.ok ? 200 : 400).json(done);
+  }));
+
+  app.delete('/api/plugins/:name', wrap(async (req, res) => {
+    const done = await Plugins.remove(req.params.name);
+    res.status(done.ok ? 200 : 404).json(done);
+  }));
 
   app.get('/api/skills', wrap(async (_req, res) => {
     const skills = await Skills.listSkills();

@@ -79,6 +79,9 @@ export function parseSkill(markdown, folder = '') {
     name: name || folder,
     description,
     license: data.license ? String(data.license) : '',
+    // Which plugin brought it, if one did. Shown so a skill written by a
+    // stranger never looks like one the person wrote.
+    source: data.source ? String(data.source) : '',
     // Off is a real state, and it lives in the file rather than in config.
     // A skill is a document you own; someone editing SKILL.md in an editor
     // should be able to switch it off there and have Reflect agree.

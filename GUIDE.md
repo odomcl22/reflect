@@ -418,6 +418,24 @@ instructions for every future turn, and a web page Reflect had just read could
 otherwise talk it into giving itself a habit nobody chose. A dormant file
 changes nothing. It also never writes over a skill you wrote yourself.
 
+**Skills from elsewhere.** Reflect reads the same skill format as the rest of
+the ecosystem — a folder with a `SKILL.md` in it. In Skills → *Import a folder*,
+point it at a skill folder or a whole plugin folder. Skills and a plugin's
+older-style commands come in as skills, **switched off**, marked with where
+they came from. Read one, then tick it. Reference documents a skill points to
+come with it; scripts are copied as plain text and never run. A plugin's
+connectors are recorded and wait for connector support. Agents and hooks are
+not imported — Reflect has no sub-agents, and hooks are code.
+
+A plugin can be removed again, and takes its skills with it — except any you
+have edited and made your own.
+
+**How a skill gets used.** Type `/name` and it is used, every time. Reflect can
+also load one itself when a request matches its description, but that depends
+on the model: measured on a 9B, it loaded a skill every time it was named and
+never once on its own, even when asked in the skill's own trigger words. On a
+small model, name the skill.
+
 ## Folders — letting Reflect read and write your files
 
 This is the only way Reflect touches anything outside its own memory folder.
