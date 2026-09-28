@@ -1,9 +1,8 @@
 /**
  * Bringing in a plugin somebody else wrote.
  *
- * Reflect does not have a plugin system, and still does not: it has skills,
- * and it is about to have connectors. A plugin in the format the ecosystem uses
- * is a folder that bundles those — so importing one means unpacking it into the
+ * Reflect has no plugin runtime of its own: it has skills and connectors. A
+ * plugin in the format the ecosystem uses is a folder that bundles those — so importing one means unpacking it into the
  * pieces Reflect already understands, and saying plainly what did not fit.
  *
  * The format, read off real plugins rather than remembered:
@@ -16,8 +15,8 @@
  *   hooks/                       shell commands run on events
  *   .mcp.json                    connectors
  *
- * Skills and commands come in as skills. Connectors are recorded and wait for
- * connector support. Agents and hooks are refused, with the reason: Reflect has
+ * Skills and commands come in as skills; .mcp.json entries come in as
+ * connectors. Agents and hooks are refused, with the reason: Reflect has
  * no sub-agents, and hooks are code, which Reflect does not run.
  *
  * ## What arrives, arrives switched off
@@ -215,6 +214,23 @@ export async function importFolder(input) {
     }
   }
 
+  // Nothing here at all. The usual reason is a folder one level too high — a
+  // downloaded collection of plugins, where each plugin is its own folder
+  // inside. Succeeding with nothing would leave the person guessing, so say
+  // which folders inside would work.
+  if (!found.length && !skipped.length && !connectors.length) {
+    const inner = await importable(root);
+    return {
+      ok: false,
+      reason: inner.length
+        ? `This folder holds ${inner.length > 1 ? 'several plugins or skills' : 'a plugin or skill'} rather than being one. Import one of these: ${inner.slice(0, 6).join(', ')}${inner.length > 6 ? ', …' : ''}`
+        : 'There is no plugin or skill in that folder — look for one with a .claude-plugin folder, a skills folder, or a SKILL.md.',
+      imported: [],
+      skipped: [],
+      connectors: [],
+    };
+  }
+
   // Write what fits. Never over the top of anything that exists.
   const imported = [];
   for (const s of found) {
@@ -269,6 +285,21 @@ export async function importFolder(input) {
   await writeJSON(MANIFEST, { plugins: [...all, record] });
 
   return { ok: true, plugin, imported, skipped, connectors };
+}
+
+/** Folders up to two levels in that would import on their own, relative to root. */
+async function importable(root) {
+  const out = [];
+  const looks = async (dir) =>
+    (await inside(root, path.join(dir, '.claude-plugin', 'plugin.json'))) ||
+    (await inside(root, path.join(dir, 'SKILL.md'))) ||
+    (await dirs(path.join(dir, 'skills'))).length > 0;
+  for (const a of await dirs(root)) {
+    const one = path.join(root, a.name);
+    if (await looks(one)) { out.push(a.name); continue; }
+    for (const b of await dirs(one)) if (await looks(path.join(one, b.name))) out.push(`${a.name}/${b.name}`);
+  }
+  return out;
 }
 
 export async function list() {

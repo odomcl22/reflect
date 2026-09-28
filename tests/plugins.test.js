@@ -135,6 +135,21 @@ test('removing a plugin takes its skills — but not one somebody has since made
   assert.ok(await Skills.readSkill('outline'), 'an adopted skill was deleted by the plugin that once supplied it');
 });
 
+// A downloaded collection is one folder too high. Say which folders inside
+// would work, rather than succeeding with nothing.
+test('a folder of plugins names the ones inside instead of importing nothing', async () => {
+  await write('market/.claude-plugin/marketplace.json', '{"name":"market"}');
+  await write('market/plugins/alpha/.claude-plugin/plugin.json', '{"name":"alpha"}');
+  await write('market/plugins/alpha/skills/a-skill/SKILL.md', skill('a-skill'));
+  await write('market/plugins/beta/commands/b.md', '---\ndescription: B. Use when b.\n---\nB.\n');
+  const r = await Plugins.importFolder(path.join(outside, 'market'));
+  assert.equal(r.ok, false);
+  assert.match(r.reason, /plugins\/alpha/);
+
+  await write('empty/readme.txt', 'nothing to see');
+  assert.match((await Plugins.importFolder(path.join(outside, 'empty'))).reason, /no plugin or skill/);
+});
+
 test('a path that is not a folder fails plainly', async () => {
   const r = await Plugins.importFolder(path.join(outside, 'does-not-exist'));
   assert.equal(r.ok, false);
