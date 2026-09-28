@@ -169,25 +169,18 @@ read it, then turn it on.
 | Plugins | [anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official) — the official plugin directory |
 | Connectors (MCP servers) | [modelcontextprotocol/servers](https://github.com/modelcontextprotocol/servers) and the [MCP Registry](https://registry.modelcontextprotocol.io) |
 
-### Importing a skill or plugin
+### How importing works
 
-1. **Download it to your computer.** Clone the repository, or use GitHub's
-   **Code → Download ZIP** and unzip it:
-   ```bash
-   git clone https://github.com/anthropics/skills.git ~/Downloads/skills
-   ```
-2. In Reflect, open **Skills** in the left rail. Under **Plugins and skills from
-   elsewhere**, paste the folder's path and press **Import**.
-3. Reflect lists what it imported and what it refused, and why.
-4. **Read each skill**, then switch it on.
+Download it to your computer first — Reflect imports a folder from disk, not a
+URL. Then **Skills** in the left rail → **Plugins and skills from elsewhere** →
+paste the path → **Import**. Reflect says what it took and what it refused.
+The [Cookbook](#cookbook) below walks through real examples.
 
 **Which folder to point at:**
-- **A plugin:** the folder with `.claude-plugin/` inside — for example
-  `claude-plugins-official/plugins/code-review`.
+- **A plugin:** the folder with `.claude-plugin/` inside.
 - **A single skill:** the folder with `SKILL.md` inside.
 - **A collection of skills:** the folder with a `skills/` folder inside.
-  Importing all of `anthropics/skills` brings its skills in at once.
-- **A whole plugin directory** doesn't import as one thing; Reflect tells you
+- **A whole plugin directory** doesn't import as one thing — Reflect tells you
   which plugin folders inside it to pick from.
 
 **Using a skill:** type `/` and its name in the chat box, or just ask for what
@@ -205,12 +198,8 @@ when you name the skill with `/`.
 | Sub-agents and hooks | **Refused**, with the reason — they need running code or sub-agents |
 | Secrets the plugin names, like `${GITHUB_TOKEN}` | Listed as "needs …" and **never** filled in from your environment |
 
-A connector marked **needs** a token can't be given one from the app yet. For
-now, remove it and add it again under **Settings → Connectors** with its address
-and your token.
-
-**Removing a plugin** removes what it brought — except any skill you have since
-made your own.
+A connector marked **needs** a token can't be given one from the app yet —
+there's a [worked way round it](#add-a-connector-that-a-plugin-brought) below.
 
 ### Adding a connector yourself
 
@@ -222,6 +211,115 @@ sign-in, press **Sign in** once it is added.
 A connector is only offered to the model when your message mentions it — by
 name, as `@name`, or by other words you give it (*"calendar"*, *"my notes"*).
 That keeps a small local model from drowning in tools it doesn't need.
+
+---
+
+## Cookbook
+
+Worked examples, using Anthropic's public repositories. Keep the downloads
+somewhere you'll find them again — Reflect reads a folder on your disk, it does
+not copy the repository, so the folder is also where updates arrive.
+
+```bash
+mkdir -p ~/reflect-sources
+```
+
+### Install Anthropic's skills collection
+
+```bash
+git clone https://github.com/anthropics/skills.git ~/reflect-sources/skills
+```
+
+**Skills** → paste `~/reflect-sources/skills` → **Import**. Every skill in the
+collection arrives at once, all switched off. Reflect lists anything it refused
+and why — a skill whose description breaks the format's 1,024-character limit,
+for example, since a description that long would never be used to choose it.
+
+Read the ones you want and switch them on. The document skills (`docx`, `pdf`,
+`pptx`) are the exception worth knowing: they lean on their Python scripts,
+which Reflect copies but never runs, so they can explain the procedure but not
+produce the file.
+
+### Install one plugin from the official directory
+
+```bash
+git clone https://github.com/anthropics/claude-plugins-official.git ~/reflect-sources/claude-plugins
+```
+
+Import the **plugin's own folder**, not the whole repository:
+
+```
+~/reflect-sources/claude-plugins/plugins/code-review
+```
+
+Point Import at the repository root instead and it won't import anything — it
+will tell you which folders inside are plugins, so you can pick one.
+
+### Update a skill or plugin when a new version lands
+
+First update your copy of the source:
+
+```bash
+cd ~/reflect-sources/skills && git pull
+```
+
+Then, in Reflect: **Skills** → find the plugin in the list → **Remove** →
+**Import** the same folder again.
+
+Importing over the top on its own does nothing, on purpose: Reflect never
+writes over a skill that already exists, because it cannot tell whether you
+have edited it since. A re-import says so rather than failing quietly.
+
+Two things to expect after an update:
+
+- **The skill comes back switched off.** Every import does, including this one.
+  Turn it on again.
+- **Your own edits to that skill are gone**, because Remove took the plugin's
+  copy with it. To keep a skill you have made your own, open
+  `~/.reflect/skills/<name>/SKILL.md` and delete its `source:` line first.
+  Reflect then treats it as yours, and removing the plugin leaves it alone.
+
+### Remove something you have imported
+
+- **A plugin:** Skills → the plugin's row → **Remove**. It takes the skills and
+  connectors it brought — except any skill whose `source:` line you removed.
+- **A single skill:** Skills → the skill → delete it there.
+- **A connector:** Settings → Connectors → **Remove**. Signing out happens with
+  it.
+
+### Add a connector that a plugin brought
+
+Some plugins ship an MCP server rather than skills. The GitHub one, for example:
+
+```
+~/reflect-sources/claude-plugins/external_plugins/github
+```
+
+Importing it adds a connector called `github`, switched off and tagged **needs
+GITHUB_PERSONAL_ACCESS_TOKEN** — the plugin names the secret, and Reflect never
+takes it from your environment. Until the app can fill that in, remove that
+connector and add it again by hand under **Settings → Connectors** with the
+same address and your own token.
+
+### Write your own skill
+
+Ask for one: *"write me a skill for how I like meeting notes: decisions first,
+then who owes what, no summary paragraph."* Reflect writes it and leaves it
+switched off, like anything else — read it, then turn it on.
+
+Skills are folders of Markdown under `~/.reflect/skills/`. Writing one by hand
+is just a `SKILL.md` with a name and a description:
+
+```markdown
+---
+name: meeting-notes
+description: Write up meeting notes. Use when asked to write up a meeting.
+enabled: true
+---
+
+Decisions first, as a list. Then who owes what, with names.
+No summary paragraph.
+```
 
 ---
 

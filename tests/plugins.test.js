@@ -110,6 +110,32 @@ test('an import never writes over a skill that already exists', async () => {
   assert.match((await Skills.readSkill('mine')).description, /My own version/);
 });
 
+// Updating is remove-then-import, so both halves have to survive the attempt
+// that comes first: somebody re-imports, it declines, and Remove must still
+// know what it brought. It used to not — the second import wrote a record with
+// an empty skills list, orphaning the first import's skills for good.
+test('a re-import declines helpfully, and Remove still takes what it brought', async () => {
+  await write('upkit/.claude-plugin/plugin.json', '{"name":"update-kit"}');
+  await write('upkit/skills/tone-v1/SKILL.md', skill('tone-v1', 'Version one. Use when testing updates.'));
+  assert.deepEqual((await Plugins.importFolder(path.join(outside, 'upkit'))).imported, ['tone-v1']);
+  await Skills.setSkillEnabled('tone-v1', true);
+
+  // The obvious thing to try: import it again over the top.
+  const again = await Plugins.importFolder(path.join(outside, 'upkit'));
+  assert.deepEqual(again.imported, [], 'a re-import must not overwrite');
+  assert.match(again.skipped.find((x) => x.name === 'tone-v1').why, /remove the plugin first/);
+
+  // And the route that does work.
+  assert.deepEqual((await Plugins.remove('update-kit')).removed, ['tone-v1']);
+  assert.equal(await Skills.readSkill('tone-v1'), null);
+
+  await write('upkit/skills/tone-v1/SKILL.md', skill('tone-v1', 'Version two. Use when testing updates.'));
+  assert.deepEqual((await Plugins.importFolder(path.join(outside, 'upkit'))).imported, ['tone-v1']);
+  const fresh = await Skills.readSkill('tone-v1');
+  assert.match(fresh.description, /Version two/);
+  assert.equal(fresh.enabled, false, 'an updated skill comes back switched off, like any import');
+});
+
 test('a single skill folder imports on its own', async () => {
   await write('solo/SKILL.md', skill('solo-skill'));
   const r = await Plugins.importFolder(path.join(outside, 'solo'));
