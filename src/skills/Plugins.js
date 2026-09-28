@@ -240,8 +240,20 @@ export async function importFolder(input) {
       skipped.push({ what: s.origin, name: s.name, why: 'the plugin ships this twice, in skills/ and commands/; the first was kept' });
       continue;
     }
-    if (await readSkill(s.name)) {
-      skipped.push({ what: s.origin, name: s.name, why: 'a skill with this name already exists, and it is somebody else\'s' });
+    const existing = await readSkill(s.name);
+    if (existing) {
+      // Re-importing is how somebody tries to update, and the honest answer is
+      // that nothing here overwrites: this skill may have been edited since it
+      // arrived, and Reflect cannot tell. Say which case it is, because "it is
+      // somebody else's" about the plugin's own skill reads like a bug.
+      skipped.push({
+        what: s.origin,
+        name: s.name,
+        why:
+          existing.source === plugin
+            ? `this plugin already supplied ${s.name}; remove the plugin first to take a newer copy`
+            : 'a skill with this name already exists, and it is somebody else\'s',
+      });
       continue;
     }
     const markdown = frontmatter({ ...s, source: plugin }) + '\n' + s.body.replace(/^\n+/, '');
@@ -271,13 +283,23 @@ export async function importFolder(input) {
     c.status = added.ok ? 'added, switched off' : `not imported: ${added.reason}`;
   }
 
+  // What the record claims this plugin holds is read back off the skills
+  // themselves, not just this run's imports: a re-import imports nothing, and
+  // a record that then said "0 skills" would be describing the run rather than
+  // the plugin.
+  const mine = [];
+  for (const skill of await listSkills()) {
+    const raw = await readText(join(paths().skills, skill.name, 'SKILL.md'), '');
+    if (parseFrontmatter(raw).data.source === plugin) mine.push(skill.name);
+  }
+
   const record = {
     name: plugin,
     description: String(meta.description || (singleSkill ? 'A single skill' : '')).slice(0, 500),
     version: meta.version ? String(meta.version) : null,
     from: given,
     importedAt: new Date().toISOString(),
-    skills: imported,
+    skills: mine,
     connectors,
     skipped,
   };
@@ -318,14 +340,17 @@ export async function remove(name) {
   const all = await list();
   const record = all.find((p) => p.name === name);
   if (!record) return { ok: false, reason: 'no such plugin' };
+  // Every skill still marked as this plugin's, rather than the list the record
+  // happens to hold: re-importing a plugin writes a fresh record, and the
+  // second import imports nothing (nothing is overwritten), so a record-driven
+  // removal would leave the first import's skills behind with no plugin left
+  // to remove them.
   const removed = [];
-  const current = await listSkills();
-  for (const skill of record.skills || []) {
-    const here = current.find((s) => s.name === skill);
-    const raw = here ? await readText(join(paths().skills, skill, 'SKILL.md'), '') : '';
+  for (const skill of await listSkills()) {
+    const raw = await readText(join(paths().skills, skill.name, 'SKILL.md'), '');
     if (parseFrontmatter(raw).data.source === name) {
-      await removeSkill(skill);
-      removed.push(skill);
+      await removeSkill(skill.name);
+      removed.push(skill.name);
     }
   }
   // Its connectors go too — the ones still marked as its own.

@@ -4843,7 +4843,7 @@ async function showSkills() {
         <h4>${esc(p.name)} ${p.version ? `<span class="tag">${esc(p.version)}</span>` : ''}</h4>
         <div class="sub">${esc(p.description || '')}
           <div>${p.skills.length} skill${p.skills.length === 1 ? '' : 's'}${
-            p.connectors.length ? ` · ${p.connectors.length} connector${p.connectors.length === 1 ? '' : 's'} waiting for connector support` : ''}${
+            p.connectors.length ? ` · ${p.connectors.length} connector${p.connectors.length === 1 ? '' : 's'}` : ''}${
             p.skipped.length ? ` · ${p.skipped.length} not imported` : ''}</div>
         </div>
         <div class="acts2"><button data-do="unplug" class="danger">Remove</button></div>
