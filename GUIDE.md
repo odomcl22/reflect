@@ -707,15 +707,23 @@ refusal it does not understand costs a round trip and muddles the answer.
 
 ## Plugins
 
-**There are none, and that is deliberate.**
+Rail → **Skills** → *Import*, and give it a folder: a plugin in the Claude
+format (`.claude-plugin/plugin.json`, `skills/`, `commands/`, `.mcp.json`) or a
+single skill folder.
 
-Reflect is a chat app. The extension points it has are the three above — skills,
-folders, tasks — and each is a plain file you own, not a package you install.
+- **Skills and commands** arrive as skills. **MCP servers** arrive as connectors.
+  All of it is **switched off** until you read it and turn it on.
+- **Agents and hooks are refused**, with the reason, because Reflect does not run
+  code or spawn sub-agents. Scripts inside a skill are copied as inert text.
+- Secrets a plugin names (`${GITHUB_TOKEN}`) are recorded as needed, never filled
+  in from your environment.
+- Removing a plugin removes what it brought — except a skill you have since made
+  your own.
 
-The agentic framework with plugins and connectors is **ReflectForge**, a separate
-project. The line, from `DESIGN.md`: if it cannot be expressed as one thing you
-could have typed, it belongs in Forge. That boundary is enforced by tests, not just
-by intention.
+Planning, sub-agents and running code are **ReflectForge**, a separate project.
+The line, from `DESIGN.md`: if it cannot be expressed as one thing you could have
+typed, it belongs in Forge. That boundary is enforced by tests, not just by
+intention.
 
 ---
 

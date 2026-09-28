@@ -128,9 +128,18 @@ provider you chose and nothing else does — and the ledger counts every one.
 
 ## Reflect and ReflectForge
 
-Reflect is a chat app. It has no plugin system, and that is deliberate: its
-extension points are skills, folders and tasks, each a plain file you own rather
-than a package you install.
+**Reflect acts in your life. ReflectForge builds things.**
+
+Reflect is a desktop assistant: it remembers you, reaches your other apps, and
+does the one thing you asked — take a note, check your calendar, run a
+Shortcut, draft the email. It extends the way the rest of the ecosystem does:
+Agent Skills and plugins in the same format Claude
+uses, and [MCP](https://modelcontextprotocol.io) connectors, local or remote with
+browser sign-in. Everything you import arrives switched off until you've read it.
+
+What it deliberately does not do is run code, spawn sub-agents, or plan and
+review its own work. Plugin hooks and agents are refused on import, with the
+reason.
 
 The line: **if it can be expressed as one thing you would have typed, it belongs
 in Reflect. If it needs a plan, phases, and a review loop, it belongs in
