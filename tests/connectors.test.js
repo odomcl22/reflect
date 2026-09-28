@@ -23,11 +23,24 @@ const C = await import('../src/connectors/Connectors.js');
 
 await FileStore.scaffold();
 
+/** Wait until a fixture server answers. A fixed pause loses under a busy full suite. */
+async function listening(port) {
+  for (let i = 0; i < 100; i++) {
+    try {
+      await fetch(`http://127.0.0.1:${port}/`);
+      return;
+    } catch {
+      await new Promise((r) => setTimeout(r, 50));
+    }
+  }
+  throw new Error(`fixture server on ${port} never started`);
+}
+
 const FIXTURE = fileURLToPath(new URL('./fixtures/mcp-server.mjs', import.meta.url));
 const PORT = 38000 + Math.floor(Math.random() * 1000);
 const http = spawn(process.execPath, [FIXTURE, '--http', String(PORT)], { stdio: 'ignore' });
 const httpToken = spawn(process.execPath, [FIXTURE, '--http', String(PORT + 1), '--token', 'sekrit'], { stdio: 'ignore' });
-await new Promise((r) => setTimeout(r, 400));
+await Promise.all([listening(PORT), listening(PORT + 1)]);
 
 test.after(async () => {
   await C.shutdown();

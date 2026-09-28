@@ -25,13 +25,26 @@ const OAuth = await import('../src/connectors/OAuth.js');
 
 await FileStore.scaffold();
 
+/** Wait until a fixture server answers. A fixed pause loses under a busy full suite. */
+async function listening(port) {
+  for (let i = 0; i < 100; i++) {
+    try {
+      await fetch(`http://127.0.0.1:${port}/`);
+      return;
+    } catch {
+      await new Promise((r) => setTimeout(r, 50));
+    }
+  }
+  throw new Error(`fixture server on ${port} never started`);
+}
+
 const FIXTURE = fileURLToPath(new URL('./fixtures/oauth-server.mjs', import.meta.url));
 const PORT = 39000 + Math.floor(Math.random() * 500);
 const servers = [
   spawn(process.execPath, [FIXTURE, String(PORT)], { stdio: 'ignore' }),
   spawn(process.execPath, [FIXTURE, String(PORT + 1), '--no-register'], { stdio: 'ignore' }),
 ];
-await new Promise((r) => setTimeout(r, 400));
+await Promise.all([listening(PORT), listening(PORT + 1)]);
 
 const REDIRECT = 'http://127.0.0.1:5555/api/connectors/oauth/callback';
 
