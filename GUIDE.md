@@ -727,6 +727,39 @@ intention.
 
 ---
 
+## Keeping it up to date
+
+**Settings → This copy of Reflect** shows the version you are running and
+whether a newer one has been published.
+
+Reflect asks GitHub for that, at most once every few hours, and once when it
+starts. It is the only request Reflect makes that you did not ask for. It sends
+nothing except the question, and **What left this machine** counts it like
+everything else. **Check now** asks immediately.
+
+**Nothing is installed for you.** When there is a newer version, the panel
+links to the download page and you install it the way you installed this one.
+That is not an omission:
+
+- On macOS an app may only replace itself with a build signed by the same
+  identity as the one running. Reflect's builds are unsigned, which means they
+  are signed afresh each time they are built, so every update would be rejected
+  as coming from a stranger. Signing properly needs a paid Apple certificate.
+- Windows has no such rule, so it could be done there — but an app that quietly
+  swaps out its own code sits badly in one whose whole claim is that it does
+  nothing behind your back, and doing it on one platform only is worse than not
+  doing it at all.
+
+Your memory, conversations and settings live in `~/.reflect`, which installing
+a new version does not touch.
+
+**To switch the check off:** untick **Look for new versions**. Nothing then
+leaves this machine unless you ask it to. You can look for new versions by hand
+at any time at
+[github.com/odomcl22/reflect/releases](https://github.com/odomcl22/reflect/releases).
+
+---
+
 ## Building it for another machine
 
 Reflect cross-builds. From a Mac:

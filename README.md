@@ -91,8 +91,12 @@ back them up or delete them. Models will come and go; the folder is yours.
 
 ### Shows you what left your machine
 - The line under the chat box is a count, not a promise: what went to the
-  internet, and what went to other machines on your network. **Zero is
-  normal.** Click it for the full list.
+  internet, and what went to other machines on your network. Click it for the
+  full list.
+- Nothing you say is in that count. The only thing Reflect sends out on its
+  own is a check with GitHub for a newer version, every few hours — counted
+  like everything else, and switchable off in Settings. Web search and
+  connectors reach out only when you have turned them on.
 
 ---
 
@@ -331,6 +335,23 @@ your user account can read.
 
 Web search is off by default. When it is on, your search terms go to the
 provider you chose and nothing else does — and the ledger counts every one.
+
+### Checking for new versions
+
+Reflect asks GitHub, at most every few hours, whether a newer release has been
+published. It is the one request Reflect makes without being asked, it sends
+nothing but the request itself, and the ledger counts it like any other. If a
+newer version exists, **Settings → This copy of Reflect** says so and links to
+the download page.
+
+**Nothing is downloaded or installed for you**, on purpose. On macOS it could
+not be: an app can only replace itself with a build signed by the same identity,
+and unsigned builds are signed afresh every time, so every update would be
+rejected. Doing it on Windows alone would be worse than not doing it. Updating
+is a download you choose, from the link.
+
+Turn the check off with **Settings → Look for new versions**, or set
+`updateCheck: false` in `~/.reflect/config.json`.
 
 ---
 

@@ -2011,7 +2011,63 @@ async function showSettings() {
         </select>
         <br />Not a quality dial. The cache for this is resident memory, so a big window behind a big model buys swapping.
       </div>
-    </div>`;
+    </div>
+
+    <div class="glabel">This copy of Reflect</div>
+    <div class="row">
+      <h4>Version</h4>
+      <div class="sub">
+        <span class="tag" id="vernow">…</span>
+        <div id="verstate" class="fontsample quiet">Looking…</div>
+        <div style="margin-top:8px"><button type="button" id="vercheck">Check now</button></div>
+      </div>
+    </div>
+    ${check(
+      'updateCheck',
+      'Look for new versions',
+      'Asks GitHub, at most every few hours, whether a newer Reflect has been published — the one thing Reflect sends out on its own, and the ledger counts it. It never downloads or installs anything: it tells you, and you decide.',
+      cfg.updateCheck !== false
+    )}`;
+
+  // The version panel. Painted from whatever was learned last, so it says
+  // something immediately; Check now is the only thing that goes out at once.
+  const paintVersion = (u) => {
+    const now = body.querySelector('#vernow');
+    const state = body.querySelector('#verstate');
+    if (!now || !state) return;
+    now.textContent = u.current || '—';
+    if (!u.enabled) {
+      state.textContent = 'Looking for new versions is switched off.';
+      return;
+    }
+    if (u.ok === false) {
+      state.textContent = `Could not check: ${u.reason || 'no answer'}.`;
+      return;
+    }
+    if (u.newer) {
+      state.innerHTML = `<b>${esc(u.latest)} is available.</b> <a href="${esc(u.url)}" target="_blank" rel="noreferrer">Open the download page</a> — nothing is installed for you.`;
+      return;
+    }
+    const when = u.checkedAt ? new Date(u.checkedAt).toLocaleString() : null;
+    state.textContent = u.latest
+      ? `This is the newest published version${when ? `, as of ${when}` : ''}.`
+      : 'Nothing has been published to compare against yet.';
+  };
+  const askVersion = async (force) => {
+    try {
+      paintVersion(await (await fetch(`/api/update${force ? '?force=1' : ''}`)).json());
+    } catch {
+      const state = body.querySelector('#verstate');
+      if (state) state.textContent = 'Could not check just now.';
+    }
+  };
+  askVersion(false);
+  body.querySelector('#vercheck')?.addEventListener('click', async (e) => {
+    e.target.disabled = true;
+    body.querySelector('#verstate').textContent = 'Checking…';
+    await askVersion(true);
+    e.target.disabled = false;
+  });
 
   const save = async (patch) => {
     await fetch('/api/settings', {

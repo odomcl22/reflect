@@ -50,6 +50,7 @@ import { installStarterSkills } from './skills/Starter.js';
 import * as Grants from './grants/Grants.js';
 import * as Tasks from './tasks/Tasks.js';
 import { runTask, startScheduler } from './tasks/Scheduler.js';
+import * as Updates from './update/Updates.js';
 import * as Folders from './grants/Folders.js';
 import * as Attachments from './attachments/Attachments.js';
 import * as Whisper from './speech/Whisper.js';
@@ -188,7 +189,28 @@ export async function createApp() {
   // deleted, and an edited one is the user's file from then on.
   await installStarterSkills({ listSkills: Skills.listSkills, writeSkill: Skills.writeSkill }).catch(() => {});
 
+  // Look for a newer version once, in the background. Deliberately not awaited:
+  // a slow or absent network must not hold up a local app starting, and the
+  // answer is only ever shown in Settings.
+  if (config.updateCheck !== false) {
+    Updates.check({ current: VERSION }).catch(() => {});
+  }
+
   // ---- status -------------------------------------------------------------
+
+  // Whether a newer Reflect has been published. The only thing here that goes
+  // out without being asked for — switched on by default, switched off in
+  // Settings, and counted in the ledger either way. Nothing is downloaded.
+  app.get('/api/update', wrap(async (req, res) => {
+    const cfg = await loadConfig();
+    res.json(
+      await Updates.status({
+        current: VERSION,
+        enabled: cfg.updateCheck !== false,
+        force: req.query.force === '1',
+      })
+    );
+  }));
 
   app.get('/api/health', wrap(async (_req, res) => {
     res.json({
@@ -377,7 +399,7 @@ export async function createApp() {
   }));
 
   app.post('/api/settings', wrap(async (req, res) => {
-    const allowed = ['model', 'mode', 'depth', 'thinking', 'maxContext', 'artifacts', 'autoExtract', 'extractModel', 'theme', 'keepWarmMinutes', 'speech', 'sleep', 'appearance'];
+    const allowed = ['model', 'mode', 'depth', 'thinking', 'maxContext', 'artifacts', 'autoExtract', 'extractModel', 'theme', 'keepWarmMinutes', 'speech', 'sleep', 'appearance', 'updateCheck'];
     const patch = {};
     for (const key of allowed) if (key in (req.body || {})) patch[key] = req.body[key];
     // Appearance is checked value by value against what the page can draw, so
