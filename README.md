@@ -392,6 +392,16 @@ npm run dist      # build an installer for this platform
 npm run dist:win  # Windows, cross-built from a Mac
 ```
 
+A signed, notarized Mac release needs a Developer ID certificate in your
+keychain and a stored notarytool profile:
+
+```bash
+APPLE_KEYCHAIN_PROFILE=<profile> npm run dist   # signs and notarizes the app
+APPLE_KEYCHAIN_PROFILE=<profile> npm run notarize:dmg   # and the disk image
+```
+
+Without them the build is simply unsigned.
+
 [GUIDE.md](GUIDE.md) is the user manual. [DESIGN.md](DESIGN.md) is the
 reasoning behind the decisions. [SECURITY.md](SECURITY.md) says how to report a
 problem.

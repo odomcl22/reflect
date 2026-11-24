@@ -42,7 +42,8 @@
     "dist:win": "node scripts/fetch-llama.js win-cpu-x64 && node scripts/fetch-whisper.js win32 && node scripts/check-vendor.js win32 && electron-builder --win --x64",
     "dist:linux": "node scripts/fetch-llama.js ubuntu-x64 && node scripts/fetch-whisper.js linux && node scripts/check-vendor.js linux && electron-builder --linux --x64",
     "install:voice": "npm install --no-save onnxruntime-node@^1.29.0 phonemizer@^1.2.1 && node scripts/pull-voice.js",
-    "pull:voice": "node scripts/pull-voice.js"
+    "pull:voice": "node scripts/pull-voice.js",
+    "notarize:dmg": "node scripts/notarize-dmg.js"
   },
   "keywords": [
     "local-first",
