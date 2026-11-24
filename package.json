@@ -1,6 +1,6 @@
 {
   "name": "reflect",
-  "version": "2.0.0-m9",
+  "version": "2.1.0",
   "description": "A local-first personal AI assistant whose memory is a folder of files you own.",
   "type": "module",
   "main": "src/server.js",
@@ -42,7 +42,8 @@
     "dist:win": "node scripts/fetch-llama.js win-cpu-x64 && node scripts/fetch-whisper.js win32 && node scripts/check-vendor.js win32 && electron-builder --win --x64",
     "dist:linux": "node scripts/fetch-llama.js ubuntu-x64 && node scripts/fetch-whisper.js linux && node scripts/check-vendor.js linux && electron-builder --linux --x64",
     "install:voice": "npm install --no-save onnxruntime-node@^1.29.0 phonemizer@^1.2.1 && node scripts/pull-voice.js",
-    "pull:voice": "node scripts/pull-voice.js"
+    "pull:voice": "node scripts/pull-voice.js",
+    "notarize:dmg": "node scripts/notarize-dmg.js"
   },
   "keywords": [
     "local-first",
@@ -99,7 +100,13 @@
         "dmg",
         "zip"
       ],
-      "hardenedRuntime": true
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Reflect listens only while you are dictating. The audio is turned into text on this Mac and is never uploaded.",
+        "NSAppleEventsUsageDescription": "Reflect uses Messages and Mail only when you ask it to send a message or draft an email."
+      }
     },
     "win": {
       "target": [

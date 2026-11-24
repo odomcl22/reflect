@@ -59,7 +59,7 @@ import { checkInstance } from './web/Safety.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
-export const VERSION = '2.0.0-m9';
+export const VERSION = '2.1.0';
 
 const wrap = (fn) => (req, res) =>
   Promise.resolve(fn(req, res)).catch((err) => {
@@ -770,6 +770,13 @@ export async function createApp() {
   app.post('/api/connectors/:name/enabled', wrap(async (req, res) => {
     const done = await Connectors.setEnabled(req.params.name, req.body?.enabled);
     res.status(done.ok ? 200 : 404).json(done);
+  }));
+
+  // One secret a connector names — a token, an API key. Sent here once, kept in
+  // its own owner-only file, and never sent back.
+  app.post('/api/connectors/:name/secret', wrap(async (req, res) => {
+    const done = await Connectors.setSecret(req.params.name, String(req.body?.key || ''), req.body?.value);
+    res.status(done.ok ? 200 : 400).json(done);
   }));
 
   app.post('/api/connectors/:name/test', wrap(async (req, res) => {

@@ -21,6 +21,17 @@ back them up or delete them. Models will come and go; the folder is yours.
 └── conversations/           every turn, as plain JSONL
 ```
 
+![Reflect opening on today's page: a promise you made yesterday, a year ago today, a deadline this week, and what happened yesterday](docs/screenshots/1-today.png)
+
+<p>
+  <img src="docs/screenshots/2-conversation.png" width="49%" alt="A conversation where Reflect plans a day around what it remembers" />
+  <img src="docs/screenshots/3-memory.png" width="49%" alt="The memory file, with every past version and a Restore button" />
+  <img src="docs/screenshots/7-ledger.png" width="49%" alt="The ledger: what went to the internet — nothing" />
+  <img src="docs/screenshots/8-dark.png" width="49%" alt="Dark mode with the violet accent" />
+</p>
+
+<sub>Screenshots use a made-up person and made-up data.</sub>
+
 ---
 
 ## What Reflect does
@@ -51,7 +62,7 @@ back them up or delete them. Models will come and go; the folder is yours.
   decide about the cover?"* has an answer.
 
 ### Keeps track of your day
-- An empty chat opens on **today's page**: a year ago today, the thread you left
+- An empty chat — or **Today** in the sidebar — opens on **today's page**: a year ago today, the thread you left
   mid-thought, what you said you would do this week, and what runs today. Every
   line comes from your own files, so nothing on it is invented.
 - **It remembers forward.** Say *"I'll call mom tomorrow"* in passing, and
@@ -136,10 +147,10 @@ Reflect warns you under the chat box when the model you picked is small. On a
 **Download the app** from [Releases](https://github.com/odomcl22/reflect/releases):
 the `.dmg` for Apple Silicon Macs, or the `.exe` for Windows.
 
-> **The builds are not code-signed** (that needs a paid developer
-> certificate), so your computer will warn you the first time.
-> **macOS:** right-click the app → **Open** → **Open**.
-> **Windows:** **More info** → **Run anyway**.
+> **macOS:** the app is signed and notarized by Apple, so it opens like any
+> other app.
+> **Windows:** the installer isn't code-signed yet, so SmartScreen warns the
+> first time. Choose **More info** → **Run anyway**.
 
 **Or run it from source** with [Node 20+](https://nodejs.org):
 
@@ -200,10 +211,7 @@ when you name the skill with `/`.
 | Scripts | **Copied as plain text, never run.** A skill that depends on its scripts — like the Word, PDF and PowerPoint skills — can explain what it would do, but can't do the scripted part |
 | `.mcp.json` servers | Connectors, switched off |
 | Sub-agents and hooks | **Refused**, with the reason — they need running code or sub-agents |
-| Secrets the plugin names, like `${GITHUB_TOKEN}` | Listed as "needs …" and **never** filled in from your environment |
-
-A connector marked **needs** a token can't be given one from the app yet —
-there's a [worked way round it](#add-a-connector-that-a-plugin-brought) below.
+| Secrets the plugin names, like `${GITHUB_TOKEN}` | Listed as "needs …" for you to fill in, and **never** taken from your environment |
 
 ### Adding a connector yourself
 
@@ -211,6 +219,10 @@ there's a [worked way round it](#add-a-connector-that-a-plugin-brought) below.
 it (for example `npx -y some-mcp-server`) or its `https://` address, then press
 **Add connector**. Paste a token if the service uses one; if it uses a browser
 sign-in, press **Sign in** once it is added.
+
+Tokens and keys are kept in their own file that only your user account can
+read, never beside the connector's settings, and the settings screen is never
+sent them back — it only shows whether each one is filled in.
 
 A connector is only offered to the model when your message mentions it — by
 name, as `@name`, or by other words you give it (*"calendar"*, *"my notes"*).
@@ -300,10 +312,10 @@ Some plugins ship an MCP server rather than skills. The GitHub one, for example:
 ```
 
 Importing it adds a connector called `github`, switched off and tagged **needs
-GITHUB_PERSONAL_ACCESS_TOKEN** — the plugin names the secret, and Reflect never
-takes it from your environment. Until the app can fill that in, remove that
-connector and add it again by hand under **Settings → Connectors** with the
-same address and your own token.
+GITHUB_PERSONAL_ACCESS_TOKEN**. The plugin names the secret; Reflect never takes
+it from your environment. Under **Settings → Connectors**, paste your token into
+the box beside that name and press **Save**, then switch the connector on and
+press **Test**.
 
 ### Write your own skill
 
@@ -344,11 +356,10 @@ nothing but the request itself, and the ledger counts it like any other. If a
 newer version exists, **Settings → This copy of Reflect** says so and links to
 the download page.
 
-**Nothing is downloaded or installed for you**, on purpose. On macOS it could
-not be: an app can only replace itself with a build signed by the same identity,
-and unsigned builds are signed afresh every time, so every update would be
-rejected. Doing it on Windows alone would be worse than not doing it. Updating
-is a download you choose, from the link.
+**Nothing is downloaded or installed for you**, on purpose: an app that
+quietly replaces its own code sits badly in one whose whole claim is that it
+does nothing behind your back. Updating is a download you choose, from the
+link.
 
 Turn the check off with **Settings → Look for new versions**, or set
 `updateCheck: false` in `~/.reflect/config.json`.
@@ -381,6 +392,16 @@ npm run dist      # build an installer for this platform
 npm run dist:win  # Windows, cross-built from a Mac
 ```
 
+A signed, notarized Mac release needs a Developer ID certificate in your
+keychain and a stored notarytool profile:
+
+```bash
+APPLE_KEYCHAIN_PROFILE=<profile> npm run dist   # signs and notarizes the app
+APPLE_KEYCHAIN_PROFILE=<profile> npm run notarize:dmg   # and the disk image
+```
+
+Without them the build is simply unsigned.
+
 [GUIDE.md](GUIDE.md) is the user manual. [DESIGN.md](DESIGN.md) is the
 reasoning behind the decisions. [SECURITY.md](SECURITY.md) says how to report a
 problem.
@@ -389,8 +410,9 @@ problem.
 
 ## Status
 
-Working, and used daily by its author. Unsigned, not in any app store, and not a
-finished product — expect rough edges. The memory format will stay readable
+Working, and used daily by its author. The Mac app is signed and notarized; the
+Windows installer isn't signed yet. Not in any app store, and not a finished
+product — expect rough edges. The memory format will stay readable
 whatever else changes.
 
 ## License
