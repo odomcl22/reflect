@@ -99,7 +99,13 @@
         "dmg",
         "zip"
       ],
-      "hardenedRuntime": true
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Reflect listens only while you are dictating. The audio is turned into text on this Mac and is never uploaded.",
+        "NSAppleEventsUsageDescription": "Reflect uses Messages and Mail only when you ask it to send a message or draft an email."
+      }
     },
     "win": {
       "target": [
