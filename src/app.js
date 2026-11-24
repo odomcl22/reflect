@@ -772,6 +772,13 @@ export async function createApp() {
     res.status(done.ok ? 200 : 404).json(done);
   }));
 
+  // One secret a connector names — a token, an API key. Sent here once, kept in
+  // its own owner-only file, and never sent back.
+  app.post('/api/connectors/:name/secret', wrap(async (req, res) => {
+    const done = await Connectors.setSecret(req.params.name, String(req.body?.key || ''), req.body?.value);
+    res.status(done.ok ? 200 : 400).json(done);
+  }));
+
   app.post('/api/connectors/:name/test', wrap(async (req, res) => {
     res.json(await Connectors.test(req.params.name));
   }));

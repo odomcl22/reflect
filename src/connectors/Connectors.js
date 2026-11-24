@@ -37,6 +37,10 @@ import { readJSON, writeJSON } from '../store/FileStore.js';
 import { record as ledger } from '../reflect/Ledger.js';
 import { McpClient } from './Mcp.js';
 import * as OAuth from './OAuth.js';
+import * as Secrets from './Secrets.js';
+import fsp from 'node:fs/promises';
+import path from 'node:path';
+import { homePath } from '../config.js';
 
 const FILE = 'connectors.json';
 const NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -74,14 +78,39 @@ export async function list() {
   return Array.isArray(state.connectors) ? state.connectors : [];
 }
 
-/** For the settings screen: each connector and whether it is signed in. Never the tokens. */
+/**
+ * For the settings screen: each connector, whether it is signed in, and which
+ * secrets it needs and has. Never the tokens: headers, environment and a
+ * client secret are left out entirely, because a connector added before
+ * secrets had their own file may still carry a token in plain text there, and
+ * the page has no use for any of them.
+ */
 export async function listWithStatus() {
   const all = await list();
-  return Promise.all(all.map(async (c) => ({ ...c, ...(c.type === 'http' ? { auth: await OAuth.status(c.name) } : {}) })));
+  return Promise.all(
+    all.map(async ({ headers, env, oauthClient, ...c }) => ({
+      ...c,
+      ...(oauthClient?.client_id ? { clientId: oauthClient.client_id } : {}),
+      secrets: await Secrets.status({ ...c, headers, env }),
+      ...(c.type === 'http' ? { auth: await OAuth.status(c.name) } : {}),
+    }))
+  );
+}
+
+/** Fill in one secret a connector names. The value goes to its own file, never connectors.json. */
+export async function setSecret(name, key, value) {
+  const c = (await list()).find((x) => x.name === name);
+  if (!c) return { ok: false, reason: 'no such connector' };
+  const done = await Secrets.set(c, key, value);
+  if (done.ok) forget(name);
+  return done;
 }
 
 async function save(connectors) {
   await writeJSON(FILE, { connectors });
+  // Owner-only: connectors added before secrets had their own file can still
+  // hold a token in a header here.
+  await fsp.chmod(path.join(homePath(), FILE), 0o600).catch(() => {});
   forget();
 }
 
@@ -109,13 +138,18 @@ export async function add(input = {}) {
   const all = await list();
   if (all.some((c) => c.name === name)) return { ok: false, reason: `There is already a connector called ${name}.` };
 
+  // A token typed in with the address is stored as a secret, and the header
+  // keeps only a placeholder for it.
+  const token = isHttp ? String(input.token || '').trim() : '';
+  const headers = { ...plainObject(input.headers), ...(token ? { Authorization: 'Bearer ${TOKEN}' } : {}) };
+
   const connector = {
     name,
     type: isHttp ? 'http' : 'stdio',
     ...(isHttp
       ? {
           url: String(input.url),
-          headers: plainObject(input.headers),
+          headers,
           ...(input.clientId ? { oauthClient: { client_id: String(input.clientId), ...(input.clientSecret ? { client_secret: String(input.clientSecret) } : {}) } } : {}),
         }
       : {
@@ -132,6 +166,7 @@ export async function add(input = {}) {
     ...(input.source ? { source: String(input.source) } : {}),
   };
   await save([...all, connector]);
+  if (token) await Secrets.setMany(name, { TOKEN: token });
   return { ok: true, connector };
 }
 
@@ -148,8 +183,9 @@ function splitArgs(text) {
 export async function remove(name) {
   const all = await list();
   await save(all.filter((c) => c.name !== name));
-  // A removed connector's tokens go with it.
+  // A removed connector's tokens and secrets go with it.
   await OAuth.signOut(name).catch(() => {});
+  await Secrets.remove(name).catch(() => {});
   return { ok: true };
 }
 
@@ -180,8 +216,10 @@ async function open(connector) {
   if (live && !live.client.transport.closed) return live;
   if (live) pool.delete(connector.name);
 
+  // Placeholders are filled in here and nowhere else; a missing value refuses
+  // to connect rather than sending a literal ${TOKEN} as a password.
   const client = new McpClient({
-    ...connector,
+    ...(await Secrets.resolve(connector)),
     getToken: () => OAuth.tokenFor(connector.name),
     refresh: () => OAuth.refresh(connector.name),
   });
@@ -202,7 +240,7 @@ export async function test(name) {
     return { ok: true, server: client.server, tools: tools.map((t) => ({ name: t.name, description: t.description || '' })) };
   } catch (err) {
     forget(name);
-    return { ok: false, reason: err.message, needsSignIn: Boolean(err.needsSignIn) };
+    return { ok: false, reason: err.message, needsSignIn: Boolean(err.needsSignIn), ...(err.missing ? { missing: err.missing } : {}) };
   }
 }
 

@@ -187,3 +187,75 @@ test('plural and singular reach the same connector', () => {
   assert.equal(C.named('add a journal entry', cs).map((c) => c.name).includes('journal-entries'), true);
   assert.equal(C.named('restart the servers', [{ name: 'notes-server', enabled: true }]).length, 0, 'plural of a generic word is still generic');
 });
+
+// ──────────────────────────────────────────────── secrets
+
+const Secrets = await import('../src/connectors/Secrets.js');
+
+// A pasted token used to be written into connectors.json as a header, and sent
+// back to the settings page with every listing. It now lives in its own
+// owner-only file, and the header carries only a placeholder.
+test('a pasted token is kept apart, owner-only, and never listed', async () => {
+  const added = await C.add({ name: 'tokenbox', url: `http://127.0.0.1:${PORT + 1}/mcp`, token: 'sekrit' });
+  assert.equal(added.ok, true);
+  assert.equal((await C.test('tokenbox')).ok, true, 'the token did not reach the server');
+
+  const stored = JSON.parse(await fsp.readFile(path.join(tmpHome, 'connectors.json'), 'utf8')).connectors.find((c) => c.name === 'tokenbox');
+  assert.ok(!JSON.stringify(stored).includes('sekrit'), 'the token was written into connectors.json');
+  assert.equal(stored.headers.Authorization, 'Bearer ${TOKEN}');
+  const secrets = path.join(tmpHome, 'connector-secrets.json');
+  assert.ok((await fsp.readFile(secrets, 'utf8')).includes('sekrit'));
+  assert.equal((await fsp.stat(secrets)).mode & 0o077, 0, 'the secrets file is readable by others');
+
+  const listed = JSON.stringify(await C.listWithStatus());
+  assert.ok(!listed.includes('sekrit'), 'a token reached the settings page');
+  assert.ok(!listed.includes('Authorization'), 'headers reached the settings page');
+});
+
+// The case imported plugins create: a placeholder with no value yet.
+test('a connector missing a secret says which one, and works once it is filled in', async () => {
+  await C.add({ name: 'needsbox', url: `http://127.0.0.1:${PORT + 1}/mcp`, headers: { Authorization: 'Bearer ${API_TOKEN}' } });
+  const listed = (await C.listWithStatus()).find((c) => c.name === 'needsbox');
+  assert.deepEqual(listed.secrets, [{ name: 'API_TOKEN', set: false }]);
+
+  const refused = await C.test('needsbox');
+  assert.equal(refused.ok, false);
+  assert.deepEqual(refused.missing, ['API_TOKEN']);
+  assert.match(refused.reason, /API_TOKEN/);
+
+  assert.equal((await C.setSecret('needsbox', 'API_TOKEN', 'sekrit')).ok, true);
+  assert.equal((await C.test('needsbox')).ok, true);
+  assert.deepEqual((await C.listWithStatus()).find((c) => c.name === 'needsbox').secrets, [{ name: 'API_TOKEN', set: true }]);
+});
+
+// A plugin naming ${GITHUB_TOKEN} is naming a secret, not asking for the one
+// that happens to be in Reflect's environment.
+test('a placeholder is never filled from the environment', async () => {
+  process.env.ENV_ONLY_TOKEN = 'sekrit';
+  await C.add({ name: 'envbox', url: `http://127.0.0.1:${PORT + 1}/mcp`, headers: { Authorization: 'Bearer ${ENV_ONLY_TOKEN}' } });
+  const r = await C.test('envbox');
+  delete process.env.ENV_ONLY_TOKEN;
+  assert.equal(r.ok, false, 'a secret was taken from the environment');
+  assert.deepEqual(r.missing, ['ENV_ONLY_TOKEN']);
+});
+
+test('only names a connector uses can be set', async () => {
+  assert.match((await C.setSecret('needsbox', 'SOMETHING_ELSE', 'x')).reason, /does not use/);
+  assert.match((await C.setSecret('needsbox', 'not a name', 'x')).reason, /not a name/);
+});
+
+test('an empty value clears a secret, and removing the connector removes its secrets', async () => {
+  await C.setSecret('needsbox', 'API_TOKEN', '');
+  assert.deepEqual((await C.listWithStatus()).find((c) => c.name === 'needsbox').secrets, [{ name: 'API_TOKEN', set: false }]);
+  await C.remove('tokenbox');
+  const left = await fsp.readFile(path.join(tmpHome, 'connector-secrets.json'), 'utf8');
+  assert.ok(!left.includes('tokenbox'), 'a removed connector left its secrets behind');
+});
+
+test('every place a placeholder can sit is filled in', async () => {
+  await Secrets.setMany('everywhere', { A: '1', B: '2', C: '3' });
+  const r = await Secrets.resolve({
+    name: 'everywhere', command: 'run-${A}', args: ['--key=${B}'], env: { KEY: '${C}' }, headers: { X: '${A}${B}' }, url: 'https://x.invalid/${C}',
+  });
+  assert.deepEqual([r.command, r.args[0], r.env.KEY, r.headers.X, r.url], ['run-1', '--key=2', '3', '12', 'https://x.invalid/3']);
+});
