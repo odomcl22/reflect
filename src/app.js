@@ -59,7 +59,7 @@ import { checkInstance } from './web/Safety.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
-export const VERSION = '2.0.0-m9';
+export const VERSION = '2.1.0';
 
 const wrap = (fn) => (req, res) =>
   Promise.resolve(fn(req, res)).catch((err) => {
