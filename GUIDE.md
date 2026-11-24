@@ -136,6 +136,15 @@ switched off. A connector that runs on this machine gets only what it needs to
 run, not Reflect's whole environment. If a plugin's connector needs a secret
 (`${GITHUB_TOKEN}`), Reflect records that it does and **does not fill it in**
 from your environment — otherwise a plugin could name any secret you have.
+Instead the connector shows a box for each one under **Settings →
+Connectors**: paste the value and press **Save**.
+
+**Where tokens live.** A token you paste — when adding a connector, or into
+one of those boxes — goes into `~/.reflect/connector-secrets.json`, which only
+your user account can read. The connector's own settings keep just a
+placeholder such as `${TOKEN}`, filled in at the moment Reflect connects, and
+the settings screen is never sent a value back: it only shows whether each one
+is filled in. Removing a connector removes its secrets.
 Whatever a connector returns is treated as data, not instructions.
 
 **Signing in.** For a service that makes you sign in, add its address and
@@ -282,8 +291,9 @@ keeps asking for a week and then goes quiet.
 
 ## While you were away
 
-The empty chat is not empty any more. When Reflect has something to show, it
-shows today's page: **a year ago today** from your journal, the thread you left
+The empty chat is not empty any more — and **Today**, at the bottom of the
+sidebar, brings it back from inside any conversation. When Reflect has
+something to show, it shows today's page: **a year ago today** from your journal, the thread you left
 mid-thought, what is owed this week, what runs today, and yesterday played
 back. Every line is computed from your own files — nothing on the page is
 generated, so nothing on it can be invented.
@@ -739,16 +749,8 @@ everything else. **Check now** asks immediately.
 
 **Nothing is installed for you.** When there is a newer version, the panel
 links to the download page and you install it the way you installed this one.
-That is not an omission:
-
-- On macOS an app may only replace itself with a build signed by the same
-  identity as the one running. Reflect's builds are unsigned, which means they
-  are signed afresh each time they are built, so every update would be rejected
-  as coming from a stranger. Signing properly needs a paid Apple certificate.
-- Windows has no such rule, so it could be done there — but an app that quietly
-  swaps out its own code sits badly in one whose whole claim is that it does
-  nothing behind your back, and doing it on one platform only is worse than not
-  doing it at all.
+That is a choice, not a limitation: an app that quietly swaps out its own code
+sits badly in one whose whole claim is that it does nothing behind your back.
 
 Your memory, conversations and settings live in `~/.reflect`, which installing
 a new version does not touch.
