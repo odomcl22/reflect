@@ -749,6 +749,30 @@
   .thread, .canvas .empty, .composer { zoom:var(--reading-scale); }
   .thread, .canvas .empty, .composer textarea { font-family:var(--reading-font); }
 
+  .connsecrets { display:flex; flex-direction:column; gap:6px; margin-top:8px; width:100%; }
+  .connsecret { display:flex; gap:8px; align-items:center; flex-wrap:wrap; font-size:13px; }
+  .connsecret span { font-family:var(--mono); font-size:12px; color:var(--ink-2); min-width:120px; }
+  .connsecret input { flex:1 1 200px; }
+  /* In settings a drop-down is the whole row's answer, not a chip in the
+     composer, so it gets room for its label and looks like a control. */
+  #setbody select { max-width:100%; border:1px solid var(--line); background:var(--surface);
+                    color:var(--ink); padding:6px 10px; border-radius:8px; font-size:13px; }
+  #setbody select:hover { border-color:var(--accent); background:var(--surface); }
+  /* A grid column of 1fr will not shrink below its widest child, so a long
+     option label pushed the row past its card. minmax(0,…) lets it give way,
+     and the drop-down truncates inside its own border instead. */
+  #setbody .row { grid-template-columns:minmax(0,1fr) auto; }
+  #setbody select { box-sizing:border-box; text-overflow:ellipsis; }
+
+  /* A row of the settings' own headings, so the list can be jumped through. */
+  /* Sticks to the very top of the scrolling box, over its padding and edge to
+     edge, so nothing scrolling under it can show above or beside it. */
+  .setnav { position:sticky; top:-14px; z-index:2; display:flex; flex-wrap:wrap; gap:6px;
+            margin:-14px -18px 8px; padding:14px 18px 10px; background:var(--surface);
+            border-bottom:1px solid var(--line-soft); }
+  .setnav button { font:inherit; font-size:12px; padding:4px 10px; border-radius:999px;
+                   border:1px solid var(--line); background:transparent; color:var(--ink-2); cursor:pointer; }
+  .setnav button:hover { border-color:var(--accent); color:var(--accent-ink); }
   .swatches { display:flex; gap:8px; flex-wrap:wrap; margin-top:4px; }
   .swatch { width:26px; height:26px; border-radius:50%; border:2px solid transparent; cursor:pointer;
             box-shadow:0 0 0 1px var(--line); padding:0; }
@@ -1073,6 +1097,7 @@
     <div class="convs" id="convs"></div>
   </div>
   <div class="rail-foot">
+    <button id="today" title="Today — where you left things"><span class="word">Today</span></button>
     <button id="browse" title="Memory"><span class="word">Memory</span></button>
     <button id="history" title="History"><span class="word">History</span></button>
     <button id="skills" title="Skills"><span class="word">Skills</span></button>
@@ -1862,7 +1887,7 @@ async function showSettings() {
               <label><input type="checkbox" data-connon${c.enabled !== false ? ' checked' : ''} /> <b>${esc(c.name)}</b></label>
               <span class="p">${c.type === 'http' ? esc(c.url) : 'runs on this Mac'}</span>
               ${c.source ? `<span class="tag">from ${esc(c.source)}</span>` : ''}
-              ${c.needs?.length ? `<span class="tag warn">needs ${esc(c.needs.join(', '))}</span>` : ''}
+              ${(c.secrets || []).some((x) => !x.set) ? `<span class="tag warn">needs ${esc(c.secrets.filter((x) => !x.set).map((x) => x.name).join(', '))}</span>` : ''}
               ${c.type === 'http' && c.auth?.signedIn ? '<span class="tag ok">signed in</span>' : ''}
               ${c.aliases?.length ? `<span class="p">also: ${esc(c.aliases.join(', '))}</span>` : ''}
               <span class="connacts">${
@@ -1872,6 +1897,14 @@ async function showSettings() {
                     : '<button type="button" data-connin>Sign in</button>'
                   : ''
               }<button type="button" data-conntest>Test</button><button type="button" data-connrm class="danger">Remove</button></span>
+              ${(c.secrets || []).length ? `<div class="connsecrets">${c.secrets
+                .map(
+                  (x) => `<label class="connsecret"><span>${esc(x.name)}</span>
+                    <input type="password" autocomplete="off" data-secret="${esc(x.name)}"
+                      placeholder="${x.set ? 'saved — type to replace' : 'paste it here'}" />
+                    <button type="button" data-secretsave="${esc(x.name)}">Save</button></label>`
+                )
+                .join('')}</div>` : ''}
               <div class="connout"></div>
             </div>`
                 )
@@ -2062,6 +2095,29 @@ async function showSettings() {
     }
   };
   askVersion(false);
+
+  // Settings is a long list. A row of its own headings at the top, kept in
+  // view, so "where is the voice setting" is one click rather than a scroll.
+  const SHORT = { 'How Reflect answers': 'Answers', 'This copy of Reflect': 'Version' };
+  const heads = [...body.querySelectorAll(':scope > .glabel')];
+  if (heads.length > 3) {
+    const navEl = document.createElement('div');
+    navEl.className = 'setnav';
+    navEl.setAttribute('role', 'navigation');
+    navEl.setAttribute('aria-label', 'Settings sections');
+    heads.forEach((h) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = SHORT[h.textContent.trim()] || h.textContent.trim();
+      b.addEventListener('click', () => {
+        // Land the heading just under the bar, which overhangs the box's own padding.
+        const top = h.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop - (navEl.offsetHeight - 14) - 10;
+        body.scrollTo({ top, behavior: 'smooth' });
+      });
+      navEl.append(b);
+    });
+    body.prepend(navEl);
+  }
   body.querySelector('#vercheck')?.addEventListener('click', async (e) => {
     e.target.disabled = true;
     body.querySelector('#verstate').textContent = 'Checking…';
@@ -2129,6 +2185,24 @@ async function showSettings() {
         : r.needsSignIn ? 'It needs you to sign in first — press Sign in.' : `Did not connect: ${r.reason}`;
       out.classList.toggle('bad', !r.ok);
     });
+    row.querySelectorAll('[data-secretsave]').forEach((b) =>
+      b.addEventListener('click', async () => {
+        const key = b.dataset.secretsave;
+        const input = row.querySelector(`[data-secret="${CSS.escape(key)}"]`);
+        const out = row.querySelector('.connout');
+        const r = await (await fetch(`/api/connectors/${encodeURIComponent(name)}/secret`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key, value: input.value }),
+        })).json().catch(() => ({ ok: false, reason: 'no answer' }));
+        input.value = '';
+        if (!r.ok) {
+          out.textContent = r.reason;
+          out.classList.add('bad');
+          return;
+        }
+        showSettings();
+      })
+    );
     row.querySelector('[data-connrm]').addEventListener('click', async () => {
       if (!(await askConfirm(`Remove ${name}?`, 'Reflect will no longer be able to reach it.', 'Remove'))) return;
       await fetch(`/api/connectors/${encodeURIComponent(name)}`, { method: 'DELETE' });
@@ -2145,7 +2219,7 @@ async function showSettings() {
       name: body.querySelector('#cname2').value.trim(),
       aliases: body.querySelector('#calias').value.trim(),
       ...(isUrl
-        ? { url: what, headers: token ? { Authorization: `Bearer ${token}` } : {}, clientId: body.querySelector('#cclient').value.trim() || undefined }
+        ? { url: what, token: token || undefined, clientId: body.querySelector('#cclient').value.trim() || undefined }
         : { command: parts[0] || '', args: parts.slice(1) }),
     };
     const r = await (await fetch('/api/connectors', {
@@ -2509,14 +2583,13 @@ async function loadConversations() {
   const folder = (slug, chats) => {
     const open = isOpen(slug);
     return `<div class="folder ${open ? 'open' : ''}" data-project="${esc(slug)}">
-        <button class="ftoggle" aria-expanded="${open}">
+        <button class="ftoggle" aria-expanded="${open}"${chats.length ? '' : ' title="No chats yet. Open one, then ⋯ → file it here."'}>
           <span class="caret">›</span>
           <span class="fname">${esc(label(slug))}</span>
           <span class="fcount">${chats.length || ''}</span>
         </button>
         <button class="more" title="Rename or delete this project" aria-label="Rename or delete this project">⋯</button>
-      </div>` + (open ? `<div class="fkids">${chats.map(row).join('') ||
-        '<p class="quiet fempty">No chats yet. Open one and file it here.</p>'}</div>` : '');
+      </div>` + (open && chats.length ? `<div class="fkids">${chats.map(row).join('')}</div>` : '');
   };
 
   $('convs').innerHTML =
@@ -4424,6 +4497,9 @@ function newChat() {
   loadConversations();
 }
 $('new').addEventListener('click', newChat);
+// Today's page is what an empty chat opens on. Once a conversation is open it
+// used to be reachable only by knowing that New chat brings it back; this says so.
+$('today').addEventListener('click', newChat);
 $('newproj').addEventListener('click', newProject);
 $('input').addEventListener('keydown', (e) => {
   const picking = !$('picker').hidden;
@@ -6235,6 +6311,8 @@ const ICONS = {
   memory: '<path d="M5.5 3.5h6l3.5 3.5v9.5a1 1 0 0 1-1 1h-8.5a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1Z"/><path d="M11.5 3.5V7h3.5"/><circle cx="10" cy="12" r="1.6"/>',
   // A clock, because history is when rather than what.
   history: '<circle cx="10" cy="10" r="6.5"/><path d="M10 6.5V10l2.5 1.75"/>',
+  // A calendar page with today marked: the day, not the archive.
+  today: '<rect x="3.5" y="4.5" width="13" height="12" rx="1.6"/><path d="M3.5 8h13M7 3v3M13 3v3"/><circle cx="10" cy="12.2" r="1.4"/>',
   // A four-point spark. Skills are the thing that makes a turn better than it
   // would have been.
   skills: '<path d="M10 3.5c.6 3.2 2.8 5.4 6 6-3.2.6-5.4 2.8-6 6-.6-3.2-2.8-5.4-6-6 3.2-.6 5.4-2.8 6-6Z"/>',
@@ -6276,6 +6354,7 @@ function paintIcons() {
     const el = $(id);
     if (el) el.insertAdjacentHTML('afterbegin', icon(name));
   };
+  put('today', 'today');
   put('browse', 'memory');
   put('history', 'history');
   put('skills', 'skills');
